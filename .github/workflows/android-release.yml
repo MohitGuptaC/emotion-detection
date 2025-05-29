@@ -38,9 +38,6 @@ jobs:
           echo "$KEYSTORE_FILE" | base64 -d > app/my-release-key.jks
         env:
           KEYSTORE_FILE: ${{ secrets.KEYSTORE_FILE }}
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -49,7 +46,7 @@ jobs:
         run: chmod +x .github/scripts/increment_release_tag.sh
 
       - name: Build signed split APKs
-        run: cd app && ../gradlew assembleRelease
+        run: cd app && ../gradlew assembleRelease --no-daemon --no-build-cache --no-configuration-cache
         env:
           ORG_GRADLE_PROJECT_storeFile: my-release-key.jks
           ORG_GRADLE_PROJECT_storePassword: ${{ secrets.KEYSTORE_PASSWORD }}

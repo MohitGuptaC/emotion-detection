@@ -114,7 +114,7 @@ fun MainScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(0.4f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.Bottom
             ) {
                 // Capture Image Button
                 CaptureButton(
