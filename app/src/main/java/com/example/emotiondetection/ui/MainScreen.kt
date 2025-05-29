@@ -5,11 +5,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.Button
@@ -29,12 +31,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.emotiondetection.R
 import com.example.emotiondetection.ui.theme.AppColors
+import java.util.Locale
 
 @Composable
 fun MainScreen(
     state: MainScreenState,
     onEvent: (MainScreenEvent) -> Unit
 ) {
+    val navigationBarsInsets = WindowInsets.navigationBars
+    
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -98,7 +103,7 @@ fun MainScreen(
                         
                         state.lastConfidence?.let { confidence ->
                             Text(
-                                text = "Confidence: ${String.format("%.1f%%", confidence * 100)}",
+                                text = "Confidence: ${String.format(Locale.getDefault(), "%.1f%%", confidence * 100)}",
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 textAlign = TextAlign.Center,
                                 fontSize = 14.sp,
@@ -113,7 +118,8 @@ fun MainScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(0.4f),
+                    .weight(0.4f)
+                    .padding(bottom = navigationBarsInsets.asPaddingValues().calculateBottomPadding()),
                 verticalArrangement = Arrangement.Bottom
             ) {
                 // Capture Image Button
@@ -122,11 +128,15 @@ fun MainScreen(
                     onClick = { onEvent(MainScreenEvent.CaptureImage) }
                 )
 
+                Spacer(modifier = Modifier.height(12.dp))
+
                 // Select from Gallery Button
                 SelectFromGalleryButton(
                     enabled = !state.isLoading,
                     onClick = { onEvent(MainScreenEvent.SelectFromGallery) }
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Reset Button
                 ResetButton(
@@ -192,7 +202,6 @@ private fun ActionButton(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp)
             .height(48.dp)
     ) {
         Text(
