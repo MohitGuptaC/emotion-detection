@@ -11,7 +11,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.graphics.scale
 import androidx.lifecycle.ViewModel
-import com.example.emotiondetection.R
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
@@ -30,19 +29,19 @@ class MainViewModel : ViewModel() {
     companion object {
         private const val TAG = "MainViewModel"
         private const val MODEL_FILE = "metadata.tflite"
-
-        // Model configuration matching Python code
         private const val INPUT_WIDTH = 224
         private const val INPUT_HEIGHT = 224
         private const val INPUT_CHANNELS = 3
-        private const val IS_NCHW = true  // NCHW format as specified
         private val INPUT_MEAN = floatArrayOf(0.5f, 0.5f, 0.5f)
         private val INPUT_STD = floatArrayOf(0.5f, 0.5f, 0.5f)
         private val EMOTION_LABELS = arrayOf(
             "Neutral", "Happiness", "Surprise", "Sadness",
             "Anger", "Disgust", "Fear", "Contempt"
         )
-    }    private var interpreter: Interpreter? = null
+    }
+
+    private var interpreter: Interpreter? = null
+    
     private val faceDetector by lazy {
         val options = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
@@ -52,6 +51,41 @@ class MainViewModel : ViewModel() {
             .enableTracking()
             .build()
         FaceDetection.getClient(options)
+    }
+
+    // Helper methods to reduce redundancy
+    private fun updateStateWithError(message: String, exception: Exception? = null) {
+        if (exception != null) {
+            Log.e(TAG, "ERROR: $message", exception)
+        }
+        state = state.copy(
+            lastResult = if (exception != null) "ERROR: $message - ${exception.message}" else message,
+            isLoading = false,
+            lastConfidence = null
+        )
+    }
+
+    private fun updateStateWithLoading(message: String) {
+        state = state.copy(
+            lastResult = message,
+            isLoading = true,
+            lastConfidence = null
+        )
+    }
+
+    private fun updateStateWithSuccess(result: String, confidence: Float? = null, detectedImage: Bitmap? = null) {
+        state = state.copy(
+            lastResult = result,
+            lastConfidence = confidence,
+            isLoading = false,
+            detectedImage = detectedImage ?: state.detectedImage
+        )
+    }
+
+    private fun safeBitmapRecycle(bitmap: Bitmap?) {
+        if (bitmap != null && !bitmap.isRecycled) {
+            bitmap.recycle()
+        }
     }
 
     fun onEvent(event: MainScreenEvent) {
@@ -115,93 +149,59 @@ class MainViewModel : ViewModel() {
     fun handleImageResult(bitmap: Bitmap?, context: Context) {
         try {
             if (bitmap == null) {
-                state = state.copy(
-                    lastResult = context.getString(R.string.unable_to_capture_image),
-                    lastConfidence = null,
-                    isLoading = false
-                )
+                updateStateWithError("Unable to capture image")
                 return
             }
 
             // Load model if not done
             if (interpreter == null) {
-                state = state.copy(
-                    lastResult = "Loading model...",
-                    isLoading = true,
-                    lastConfidence = null
-                )
+                updateStateWithLoading("Loading model...")
 
                 if (!loadModel(context)) {
-                    state = state.copy(
-                        lastResult = "ERROR: Cannot load model",
-                        isLoading = false,
-                        lastConfidence = null
-                    )
+                    updateStateWithError("Cannot load model")
                     return
                 }
             }
 
             // Recycle current bitmap
-            state.detectedImage?.recycle()
+            safeBitmapRecycle(state.detectedImage)
 
-            state = state.copy(
-                isLoading = true,
-                lastResult = "Detecting faces...",
-                lastConfidence = null
-            )
+            updateStateWithLoading("Detecting faces...")
 
             // Detect faces first (like Python code)
-            detectFacesAndAnalyzeEmotion(bitmap, context)
+            detectFacesAndAnalyzeEmotion(bitmap)
 
         } catch (e: Exception) {
-            Log.e(TAG, "ERROR in handleImageResult: ${e.message}", e)
-            state = state.copy(
-                lastResult = "ERROR: ${e.message}",
-                isLoading = false,
-                lastConfidence = null
-            )
+            updateStateWithError("in handleImageResult", e)
         }
     }
 
-    private fun detectFacesAndAnalyzeEmotion(bitmap: Bitmap, context: Context) {
+    private fun detectFacesAndAnalyzeEmotion(bitmap: Bitmap) {
         val image = InputImage.fromBitmap(bitmap, 0)
 
         faceDetector.process(image)
             .addOnSuccessListener { faces ->
                 if (faces.isEmpty()) {
                     Log.w(TAG, "No faces detected in image")
-                    state = state.copy(
-                        lastResult = "No faces detected",
-                        isLoading = false,
-                        lastConfidence = null,
-                        detectedImage = bitmap
-                    )
+                    updateStateWithSuccess("No faces detected", detectedImage = bitmap)
                 } else {
                     Log.d(TAG, "Found ${faces.size} face(s)")
-                    processFacesForEmotion(bitmap, faces, context)
+                    processFacesForEmotion(bitmap, faces)
                 }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Face detection failed", e)
-                state = state.copy(
-                    lastResult = "Face detection failed: ${e.message}",
-                    isLoading = false,
-                    lastConfidence = null
-                )
+                updateStateWithError("Face detection failed", e)
             }
     }
 
-    private fun processFacesForEmotion(originalBitmap: Bitmap, faces: List<Face>, context: Context) {
+    private fun processFacesForEmotion(originalBitmap: Bitmap, faces: List<Face>) {
         try {
             // Process the first (largest) face for emotion recognition
             val largestFace = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
 
             if (largestFace == null) {
-                state = state.copy(
-                    lastResult = "No valid face found",
-                    isLoading = false,
-                    lastConfidence = null
-                )
+                updateStateWithError("No valid face found")
                 return
             }
 
@@ -210,51 +210,34 @@ class MainViewModel : ViewModel() {
             // Extract and preprocess face
             val faceBitmap = extractFaceFromBitmap(originalBitmap, largestFace.boundingBox)
             if (faceBitmap == null) {
-                state = state.copy(
-                    lastResult = "Failed to extract face",
-                    isLoading = false,
-                    lastConfidence = null
-                )
+                updateStateWithError("Failed to extract face")
                 return
             }
 
             val processedFaceBitmap = preprocessImage(faceBitmap)
             if (processedFaceBitmap == null) {
-                faceBitmap.recycle()
-                state = state.copy(
-                    lastResult = "Face preprocessing failed",
-                    isLoading = false,
-                    lastConfidence = null
-                )
+                safeBitmapRecycle(faceBitmap)
+                updateStateWithError("Face preprocessing failed")
                 return
             }
 
             // Create visualization bitmap with face bounding box
             val visualizationBitmap = createVisualizationBitmap(originalBitmap, faces)
 
-            state = state.copy(
-                detectedImage = visualizationBitmap,
-                isLoading = true,
-                lastResult = "Analyzing emotion...",
-                lastConfidence = null
-            )
+            updateStateWithLoading("Analyzing emotion...")
+            state = state.copy(detectedImage = visualizationBitmap)
 
             // Analyze emotion on the processed face
-            detectEmotionOnFace(processedFaceBitmap, context)
+            detectEmotionOnFace(processedFaceBitmap)
 
             // Cleanup
-            faceBitmap.recycle()
+            safeBitmapRecycle(faceBitmap)
             if (processedFaceBitmap != faceBitmap) {
-                processedFaceBitmap.recycle()
+                safeBitmapRecycle(processedFaceBitmap)
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "ERROR processing faces: ${e.message}", e)
-            state = state.copy(
-                lastResult = "Error processing faces: ${e.message}",
-                isLoading = false,
-                lastConfidence = null
-            )
+            updateStateWithError("processing faces", e)
         }
     }
 
@@ -278,7 +261,6 @@ class MainViewModel : ViewModel() {
             Log.d(TAG, "Extracting face: ${left},${top} ${width}x${height} from ${bitmap.width}x${bitmap.height}")
 
             Bitmap.createBitmap(bitmap, left, top, width, height)
-
         } catch (e: Exception) {
             Log.e(TAG, "Error extracting face: ${e.message}", e)
             null
@@ -288,26 +270,28 @@ class MainViewModel : ViewModel() {
     private fun createVisualizationBitmap(originalBitmap: Bitmap, faces: List<Face>): Bitmap {
         val mutableBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(mutableBitmap)
+        
+        // Combined paint for both rectangle and text to reduce object creation
         val paint = Paint().apply {
             color = android.graphics.Color.GREEN
-            style = Paint.Style.STROKE
-            strokeWidth = 5f
-        }
-
-        val textPaint = Paint().apply {
-            color = android.graphics.Color.GREEN
-            textSize = 40f
             isAntiAlias = true
         }
 
         // Draw bounding boxes around detected faces
         faces.forEach { face ->
+            // Draw rectangle
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 5f
             canvas.drawRect(face.boundingBox, paint)
+            
+            // Draw text
+            paint.style = Paint.Style.FILL
+            paint.textSize = 40f
             canvas.drawText(
                 "Face",
                 face.boundingBox.left.toFloat(),
                 face.boundingBox.top.toFloat() - 10,
-                textPaint
+                paint
             )
         }
 
@@ -339,13 +323,9 @@ class MainViewModel : ViewModel() {
                 scaledBitmap
             }
 
-            // Cleanup
-            if (squareBitmap != finalBitmap && !squareBitmap.isRecycled) {
-                squareBitmap.recycle()
-            }
-            if (scaledBitmap != finalBitmap && !scaledBitmap.isRecycled) {
-                scaledBitmap.recycle()
-            }
+            // Cleanup intermediate bitmaps
+            safeBitmapRecycle(if (squareBitmap != finalBitmap) squareBitmap else null)
+            safeBitmapRecycle(if (scaledBitmap != finalBitmap) scaledBitmap else null)
 
             Log.d(TAG, "Face preprocessing complete: ${finalBitmap.width}x${finalBitmap.height}")
             finalBitmap
@@ -356,28 +336,18 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private fun detectEmotionOnFace(faceBitmap: Bitmap, context: Context) {
+    private fun detectEmotionOnFace(faceBitmap: Bitmap) {
         try {
-            val currentInterpreter = interpreter
-
-            if (currentInterpreter == null) {
+            if (interpreter == null) {
                 Log.e(TAG, "ERROR: Interpreter not initialized")
-                state = state.copy(
-                    lastResult = "ERROR: Model not properly initialized",
-                    isLoading = false,
-                    lastConfidence = null
-                )
+                updateStateWithError("Model not properly initialized")
                 return
             }
 
             // Convert face bitmap to ByteBuffer with NCHW format
             val inputBuffer = bitmapToByteBuffer(faceBitmap)
             if (inputBuffer == null) {
-                state = state.copy(
-                    lastResult = "ERROR: Failed to convert face image to model input format",
-                    isLoading = false,
-                    lastConfidence = null
-                )
+                updateStateWithError("Failed to convert face image to model input format")
                 return
             }
 
@@ -387,41 +357,43 @@ class MainViewModel : ViewModel() {
             Log.d(TAG, "Running emotion inference on face...")
             val startTime = System.currentTimeMillis()
 
-            currentInterpreter.run(inputBuffer, outputArray)
+            interpreter!!.run(inputBuffer, outputArray)
 
             val inferenceTime = System.currentTimeMillis() - startTime
-            Log.d(TAG, "Emotion inference completed in ${inferenceTime}ms")            // Process results
-            val output = outputArray[0]
+            Log.d(TAG, "Emotion inference completed in ${inferenceTime}ms")
 
-            // Apply softmax (same as Python code)
-            val softmaxOutput = applySoftmax(output)
-
-            // Find best emotion
+            // Process results and find best emotion
+            val softmaxOutput = applySoftmax(outputArray[0])
             val maxIndex = softmaxOutput.indices.maxByOrNull { softmaxOutput[it] } ?: 0
             val confidence = softmaxOutput[maxIndex].coerceIn(0f, 1f)
             val detectedEmotion = EMOTION_LABELS[maxIndex]
 
-            state = state.copy(
-                lastResult = detectedEmotion,
-                lastConfidence = confidence,
-                isLoading = false
-            )
+            updateStateWithSuccess(detectedEmotion, confidence)
 
         } catch (e: Exception) {
-            Log.e(TAG, "ERROR during emotion detection: ${e.message}", e)
-            state = state.copy(
-                lastResult = "ERROR: Emotion detection failed - ${e.message}",
-                isLoading = false,
-                lastConfidence = null
-            )        }
+            updateStateWithError("during emotion detection", e)
+        }
     }
 
     private fun applySoftmax(input: FloatArray): FloatArray {
         // Apply softmax function (same as Python implementation)
         val maxVal = input.maxOrNull() ?: 0f
-        val expValues = input.map { kotlin.math.exp((it - maxVal).toDouble()).toFloat() }
-        val sumExp = expValues.sum()
-        return expValues.map { it / sumExp }.toFloatArray()
+        var sumExp = 0f
+        val result = FloatArray(input.size)
+        
+        // Single pass: calculate exp values and sum simultaneously
+        for (i in input.indices) {
+            val expValue = kotlin.math.exp((input[i] - maxVal).toDouble()).toFloat()
+            result[i] = expValue
+            sumExp += expValue
+        }
+        
+        // Normalize by sum
+        for (i in result.indices) {
+            result[i] /= sumExp
+        }
+        
+        return result
     }
 
     private fun bitmapToByteBuffer(bitmap: Bitmap): ByteBuffer? {
@@ -475,11 +447,12 @@ class MainViewModel : ViewModel() {
 
         } catch (e: Exception) {
             Log.e(TAG, "ERROR converting face bitmap to ByteBuffer: ${e.message}", e)
-            null        }
+            null
+        }
     }
 
     private fun resetDetection() {
-        state.detectedImage?.recycle()
+        safeBitmapRecycle(state.detectedImage)
         state = state.copy(
             detectedImage = null,
             lastResult = "",
@@ -490,7 +463,7 @@ class MainViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        state.detectedImage?.recycle()
+        safeBitmapRecycle(state.detectedImage)
         interpreter?.close()
         faceDetector.close()
     }

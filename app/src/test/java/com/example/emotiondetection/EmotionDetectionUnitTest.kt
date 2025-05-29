@@ -35,31 +35,27 @@ class EmotionDetectionUnitTest {
             lastConfidence = 0.85f,
             isLoading = false
         )
-          assertEquals("Result should be updated", "Happiness", updatedState.lastResult)
-        assertEquals("Confidence should be updated", 0.85f, updatedState.lastConfidence!!, 0.001f)
+        
+        assertEquals("Result should be updated", "Happiness", updatedState.lastResult)
+        assertEquals("Confidence should be updated", 0.85f, updatedState.lastConfidence!!, TestConstants.FLOAT_TOLERANCE)
         assertFalse("Loading should be false", updatedState.isLoading)
     }
-
+    
     @Test
     fun testEmotionLabels() {
-        val emotionLabels = arrayOf(
-            "Neutral", "Happiness", "Surprise", "Sadness",
-            "Anger", "Disgust", "Fear", "Contempt"
-        )
-        
-        assertEquals("Should have 8 emotion labels", 8, emotionLabels.size)
+        assertEquals("Should have 8 emotion labels", 8, TestConstants.EMOTION_LABELS.size)
         
         // Test that all labels are properly formatted
-        for (label in emotionLabels) {
+        for (label in TestConstants.EMOTION_LABELS) {
             assertFalse("Label should not be empty", label.isEmpty())
             assertTrue("Label should start with uppercase", label[0].isUpperCase())
             assertTrue("Label should contain only letters", label.all { it.isLetter() })
         }
         
         // Test specific labels
-        assertTrue("Should contain Neutral", emotionLabels.contains("Neutral"))
-        assertTrue("Should contain Happiness", emotionLabels.contains("Happiness"))
-        assertTrue("Should contain Anger", emotionLabels.contains("Anger"))
+        assertTrue("Should contain Neutral", TestConstants.EMOTION_LABELS.contains("Neutral"))
+        assertTrue("Should contain Happiness", TestConstants.EMOTION_LABELS.contains("Happiness"))
+        assertTrue("Should contain Anger", TestConstants.EMOTION_LABELS.contains("Anger"))
     }
 
     @Test
@@ -70,7 +66,7 @@ class EmotionDetectionUnitTest {
         
         // Check that probabilities sum to 1
         val sum = result.sum()
-        assertEquals("Softmax probabilities should sum to 1", 1.0f, sum, 0.001f)
+        assertEquals("Softmax probabilities should sum to 1", 1.0f, sum, TestConstants.FLOAT_TOLERANCE)
         
         // Check that all values are positive
         for (value in result) {
@@ -90,11 +86,11 @@ class EmotionDetectionUnitTest {
         val result = applySoftmax(input)
         
         val sum = result.sum()
-        assertEquals("Softmax with zeros should sum to 1", 1.0f, sum, 0.001f)
+        assertEquals("Softmax with zeros should sum to 1", 1.0f, sum, TestConstants.FLOAT_TOLERANCE)
         
         // All values should be equal (1/4 = 0.25)
         for (value in result) {
-            assertEquals("All values should be equal", 0.25f, value, 0.001f)
+            assertEquals("All values should be equal", 0.25f, value, TestConstants.FLOAT_TOLERANCE)
         }
     }
 
@@ -104,32 +100,26 @@ class EmotionDetectionUnitTest {
         val result = applySoftmax(input)
         
         val sum = result.sum()
-        assertEquals("Softmax with negative values should sum to 1", 1.0f, sum, 0.001f)
+        assertEquals("Softmax with negative values should sum to 1", 1.0f, sum, TestConstants.FLOAT_TOLERANCE)
         
         // The zero value should have the highest probability
         val maxIndex = result.indices.maxByOrNull { result[it] } ?: 0
         assertEquals("Zero input should have highest probability", 3, maxIndex)
     }
-
+    
     @Test
     fun testModelConfiguration() {
-        // Test model configuration constants
-        val inputWidth = 224
-        val inputHeight = 224
-        val inputChannels = 3
-        val meanValues = floatArrayOf(0.5f, 0.5f, 0.5f)
-        val stdValues = floatArrayOf(0.5f, 0.5f, 0.5f)
+        // Test model configuration constants using shared values
+        assertTrue("Input width should be positive", TestConstants.MODEL_INPUT_WIDTH > 0)
+        assertTrue("Input height should be positive", TestConstants.MODEL_INPUT_HEIGHT > 0)
+        assertTrue("Input channels should be 3", TestConstants.MODEL_INPUT_CHANNELS == 3)
         
-        assertTrue("Input width should be positive", inputWidth > 0)
-        assertTrue("Input height should be positive", inputHeight > 0)
-        assertTrue("Input channels should be 3", inputChannels == 3)
-        
-        assertEquals("Mean should have 3 values", 3, meanValues.size)
-        assertEquals("Std should have 3 values", 3, stdValues.size)
+        assertEquals("Mean should have 3 values", 3, TestConstants.MODEL_MEAN_VALUES.size)
+        assertEquals("Std should have 3 values", 3, TestConstants.MODEL_STD_VALUES.size)
         
         for (i in 0 until 3) {
-            assertTrue("Mean values should be reasonable", meanValues[i] in 0.0f..1.0f)
-            assertTrue("Std values should be positive", stdValues[i] > 0.0f)
+            assertTrue("Mean values should be reasonable", TestConstants.MODEL_MEAN_VALUES[i] in 0.0f..1.0f)
+            assertTrue("Std values should be positive", TestConstants.MODEL_STD_VALUES[i] > 0.0f)
         }
     }
 
@@ -144,7 +134,7 @@ class EmotionDetectionUnitTest {
         
         // For pixel=128, normalized should be (128/255 - 0.5) / 0.5 = 0.003921...
         val expected = (128.0f / 255.0f - 0.5f) / 0.5f
-        assertEquals("Pixel normalization should be correct", expected, normalizedValue, 0.001f)
+        assertEquals("Pixel normalization should be correct", expected, normalizedValue, TestConstants.FLOAT_TOLERANCE)
     }
 
     @Test
@@ -167,15 +157,15 @@ class EmotionDetectionUnitTest {
         // Test finding max index
         val maxIndex = testArray.indices.maxByOrNull { testArray[it] } ?: 0
         assertEquals("Max index should be 1", 1, maxIndex)
-        assertEquals("Max value should be 0.8", 0.8f, testArray[maxIndex], 0.001f)
+        assertEquals("Max value should be 0.8", 0.8f, testArray[maxIndex], TestConstants.FLOAT_TOLERANCE)
         
         // Test array sum
         val sum = testArray.sum()
-        assertEquals("Sum should be 1.4", 1.4f, sum, 0.001f)
+        assertEquals("Sum should be 1.4", 1.4f, sum, TestConstants.FLOAT_TOLERANCE)
         
         // Test array max value
         val maxValue = testArray.maxOrNull() ?: 0f
-        assertEquals("Max value should be 0.8", 0.8f, maxValue, 0.001f)
+        assertEquals("Max value should be 0.8", 0.8f, maxValue, TestConstants.FLOAT_TOLERANCE)
     }
 
     /**

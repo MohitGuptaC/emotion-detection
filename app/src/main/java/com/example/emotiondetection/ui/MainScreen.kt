@@ -38,7 +38,8 @@ fun MainScreen(
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
-    ) {Column(
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
@@ -107,7 +108,8 @@ fun MainScreen(
                     }
                 }
             }
-              // Button section - 40% of screen
+
+            // Button section - 40% of screen
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -131,9 +133,9 @@ fun MainScreen(
                     enabled = state.detectedImage != null && !state.isLoading,
                     onClick = { onEvent(MainScreenEvent.ResetDetection) }
                 )
-            } // End of button section
-        } // End of main Column
-    } // End of Surface
+            }
+        }
+    }
 }
 
 @Composable
@@ -174,7 +176,8 @@ private fun ImagePreview(
 }
 
 @Composable
-private fun CaptureButton(
+private fun ActionButton(
+    text: String,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
@@ -183,7 +186,9 @@ private fun CaptureButton(
         enabled = enabled,
         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
             containerColor = AppColors.Blue,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -191,10 +196,22 @@ private fun CaptureButton(
             .height(48.dp)
     ) {
         Text(
-            text = stringResource(R.string.capture_image),
+            text = text,
             fontSize = 14.sp
         )
     }
+}
+
+@Composable
+private fun CaptureButton(
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    ActionButton(
+        text = stringResource(R.string.capture_image),
+        enabled = enabled,
+        onClick = onClick
+    )
 }
 
 @Composable
@@ -202,25 +219,11 @@ private fun ResetButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
+    ActionButton(
+        text = stringResource(R.string.reset),
         enabled = enabled,
-        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-            containerColor = AppColors.Blue,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .height(48.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.reset),
-            fontSize = 14.sp
-        )
-    }
+        onClick = onClick
+    )
 }
 
 @Composable
@@ -228,23 +231,9 @@ private fun SelectFromGalleryButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
+    ActionButton(
+        text = stringResource(R.string.select_from_gallery),
         enabled = enabled,
-        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-            containerColor = AppColors.Blue,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .height(48.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.select_from_gallery),
-            fontSize = 14.sp
-        )
-    }
+        onClick = onClick
+    )
 }

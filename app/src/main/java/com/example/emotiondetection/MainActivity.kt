@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
                 shouldLaunchCameraAfterPermission = false
             }
         } else {
-            Toast.makeText(this, getString(R.string.camera_permission_required), Toast.LENGTH_LONG).show()
+            showToast(R.string.camera_permission_required, Toast.LENGTH_LONG)
         }
     }
 
@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == RESULT_OK) {
             handleCameraResult(result.data)
         } else {
-            Toast.makeText(this, getString(R.string.image_capture_cancelled), Toast.LENGTH_SHORT).show()
+            showToast(R.string.image_capture_cancelled)
         }
     }
 
@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == RESULT_OK) {
             handleGalleryResult(result.data)
         } else {
-            Toast.makeText(this, getString(R.string.image_capture_cancelled), Toast.LENGTH_SHORT).show()
+            showToast(R.string.image_capture_cancelled)
         }
     }
 
@@ -83,7 +83,8 @@ class MainActivity : ComponentActivity() {
     private fun MainScreenContent() {
         val state = viewModel.state
         var checkCameraPermissionOnStart by remember { mutableStateOf(true) }
-          // Check camera permission on first composition without launching camera
+        
+        // Check camera permission on first composition without launching camera
         LaunchedEffect(checkCameraPermissionOnStart) {
             if (checkCameraPermissionOnStart) {
                 requestCameraPermissionOnly()
@@ -103,9 +104,34 @@ class MainActivity : ComponentActivity() {
         )
     }
     
+    // Helper method to reduce toast redundancy
+    private fun showToast(messageResId: Int, duration: Int = Toast.LENGTH_SHORT) {
+        Toast.makeText(this, getString(messageResId), duration).show()
+    }
+
+    // Helper method to reduce error handling redundancy
+    private fun handleError(tag: String, action: String, exception: Exception, messageResId: Int) {
+        Log.e(tag, "Error $action: ${exception.message}")
+        showToast(messageResId)
+    }
+
+    // Helper method to check camera permission (reduces duplication)
+    private fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
+
+    // Helper method for intent resolution pattern
+    private fun launchIntentIfAvailable(intent: Intent, launcher: (Intent) -> Unit, noAppMessageResId: Int) {
+        if (intent.resolveActivity(packageManager) != null) {
+            launcher(intent)
+        } else {
+            showToast(noAppMessageResId)
+        }
+    }
+
     // Request permission without launching camera
     private fun requestCameraPermissionOnly() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+        if (!hasCameraPermission()) {
             shouldLaunchCameraAfterPermission = false // Explicitly set to false to not launch camera
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
@@ -113,44 +139,44 @@ class MainActivity : ComponentActivity() {
 
     // This function checks permission and launches camera when button is pressed
     private fun launchCamera() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+        if (!hasCameraPermission()) {
             shouldLaunchCameraAfterPermission = true // Set flag to launch camera after permission
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         } else {
             openCamera()
         }
     }
-      // Separate method to actually open the camera
+      
+    // Separate method to actually open the camera
     private fun openCamera() {
         try {
             val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
             // Add extra to use front camera for selfies
             takePictureIntent.putExtra("android.intent.extras.CAMERA_FACING", 1)
-            if (takePictureIntent.resolveActivity(packageManager) != null) {
-                cameraLauncher.launch(takePictureIntent)
-            } else {
-                Toast.makeText(this, getString(R.string.no_camera_app_found), Toast.LENGTH_SHORT).show()
-            }
+            launchIntentIfAvailable(
+                takePictureIntent,
+                { cameraLauncher.launch(it) },
+                R.string.no_camera_app_found
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "Error launching camera: ${e.message}")
-            Toast.makeText(this, getString(R.string.error_accessing_camera), Toast.LENGTH_SHORT).show()
+            handleError(TAG, "launching camera", e, R.string.error_accessing_camera)
         }
     }
 
     private fun launchGallery() {
         try {
             val pickPhotoIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-            if (pickPhotoIntent.resolveActivity(packageManager) != null) {
-                galleryLauncher.launch(pickPhotoIntent)
-            } else {
-                Toast.makeText(this, getString(R.string.no_gallery_app_found), Toast.LENGTH_SHORT).show()
-            }
+            launchIntentIfAvailable(
+                pickPhotoIntent,
+                { galleryLauncher.launch(it) },
+                R.string.no_gallery_app_found
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "Error launching gallery: ${e.message}")
-            Toast.makeText(this, getString(R.string.unable_to_select_image), Toast.LENGTH_SHORT).show()
+            handleError(TAG, "launching gallery", e, R.string.unable_to_select_image)
         }
     }
-      private fun handleCameraResult(data: Intent?) {
+      
+    private fun handleCameraResult(data: Intent?) {
         try {
             val imageBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 data?.extras?.getParcelable("data", Bitmap::class.java)
@@ -158,25 +184,29 @@ class MainActivity : ComponentActivity() {
                 @Suppress("DEPRECATION")
                 data?.extras?.getParcelable("data")
             }
-            viewModel.handleImageResult(imageBitmap, this)
+            processImageResult(imageBitmap)
         } catch (e: Exception) {
-            Log.e(TAG, "Error handling camera result: ${e.message}")
-            Toast.makeText(this, getString(R.string.error_processing_image), Toast.LENGTH_SHORT).show()
+            handleError(TAG, "handling camera result", e, R.string.error_processing_image)
         }
     }
 
     private fun handleGalleryResult(data: Intent?) {
         try {
             val imageUri = data?.data
-            if (imageUri != null) {
-                val imageBitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
-                viewModel.handleImageResult(imageBitmap, this)
+            val imageBitmap = if (imageUri != null) {
+                MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
             } else {
-                Toast.makeText(this, getString(R.string.unable_to_select_image), Toast.LENGTH_SHORT).show()
+                showToast(R.string.unable_to_select_image)
+                return
             }
+            processImageResult(imageBitmap)
         } catch (e: Exception) {
-            Log.e(TAG, "Error handling gallery result: ${e.message}")
-            Toast.makeText(this, getString(R.string.error_processing_image), Toast.LENGTH_SHORT).show()
+            handleError(TAG, "handling gallery result", e, R.string.error_processing_image)
         }
+    }
+
+    // Extract common image processing logic
+    private fun processImageResult(imageBitmap: Bitmap?) {
+        viewModel.handleImageResult(imageBitmap, this)
     }
 }

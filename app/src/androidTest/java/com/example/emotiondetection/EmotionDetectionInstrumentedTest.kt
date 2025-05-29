@@ -28,7 +28,7 @@ class EmotionDetectionInstrumentedTest {
     @Test
     fun testAppContext() {
         // Verify the app context has the correct package name
-        assertEquals("com.example.emotiondetection", context.packageName)
+        assertEquals(TestConstants.APP_PACKAGE_NAME, context.packageName)
     }
 
     @Test
@@ -36,20 +36,21 @@ class EmotionDetectionInstrumentedTest {
         // Verify the emotion detection model file exists in assets
         val assetManager = context.assets
         try {
-            val inputStream = assetManager.open("metadata.tflite")
+            val inputStream = assetManager.open(TestConstants.MODEL_FILE_NAME)
             assertNotNull("Model file should exist", inputStream)
             inputStream.close()
         } catch (e: Exception) {
-            fail("Model file metadata.tflite not found in assets: ${e.message}")
-        }    }
+            fail("Model file ${TestConstants.MODEL_FILE_NAME} not found in assets: ${e.message}")
+        }
+    }
 
     @Test
     fun testCreateTestBitmap() {
         // Test creating a test bitmap for testing purposes
-        val testBitmap = createTestBitmap(224, 224)
+        val testBitmap = createTestBitmap(TestConstants.MODEL_INPUT_WIDTH, TestConstants.MODEL_INPUT_HEIGHT)
         assertNotNull("Test bitmap should be created", testBitmap)
-        assertEquals("Bitmap width should be 224", 224, testBitmap.width)
-        assertEquals("Bitmap height should be 224", 224, testBitmap.height)
+        assertEquals("Bitmap width should be ${TestConstants.MODEL_INPUT_WIDTH}", TestConstants.MODEL_INPUT_WIDTH, testBitmap.width)
+        assertEquals("Bitmap height should be ${TestConstants.MODEL_INPUT_HEIGHT}", TestConstants.MODEL_INPUT_HEIGHT, testBitmap.height)
         testBitmap.recycle()
     }
 
@@ -60,10 +61,10 @@ class EmotionDetectionInstrumentedTest {
         assertNotNull("Large test bitmap should be created", testBitmap)
         
         // Test that we can scale it down
-        val scaledBitmap = Bitmap.createScaledBitmap(testBitmap, 224, 224, true)
+        val scaledBitmap = Bitmap.createScaledBitmap(testBitmap, TestConstants.MODEL_INPUT_WIDTH, TestConstants.MODEL_INPUT_HEIGHT, true)
         assertNotNull("Scaled bitmap should be created", scaledBitmap)
-        assertEquals("Scaled width should be 224", 224, scaledBitmap.width)
-        assertEquals("Scaled height should be 224", 224, scaledBitmap.height)
+        assertEquals("Scaled width should be ${TestConstants.MODEL_INPUT_WIDTH}", TestConstants.MODEL_INPUT_WIDTH, scaledBitmap.width)
+        assertEquals("Scaled height should be ${TestConstants.MODEL_INPUT_HEIGHT}", TestConstants.MODEL_INPUT_HEIGHT, scaledBitmap.height)
         
         // Cleanup
         testBitmap.recycle()
@@ -72,17 +73,11 @@ class EmotionDetectionInstrumentedTest {
 
     @Test
     fun testEmotionLabels() {
-        // Test that emotion labels are properly defined
-        val expectedLabels = arrayOf(
-            "Neutral", "Happiness", "Surprise", "Sadness",
-            "Anger", "Disgust", "Fear", "Contempt"
-        )
-        
-        // This tests the consistency of emotion labels across the app
-        assertEquals("Should have 8 emotion labels", 8, expectedLabels.size)
+        // Test that emotion labels are properly defined using shared constants
+        assertEquals("Should have 8 emotion labels", 8, TestConstants.EMOTION_LABELS.size)
         
         // Test that labels are not empty
-        for (label in expectedLabels) {
+        for (label in TestConstants.EMOTION_LABELS) {
             assertFalse("Label should not be empty", label.isEmpty())
             assertTrue("Label should be capitalized", label[0].isUpperCase())
         }
@@ -90,29 +85,21 @@ class EmotionDetectionInstrumentedTest {
 
     @Test
     fun testModelDimensions() {
-        // Test that model expects correct input dimensions
-        val expectedWidth = 224
-        val expectedHeight = 224
-        val expectedChannels = 3
-        
-        // These are the dimensions our model expects
-        assertTrue("Width should be positive", expectedWidth > 0)
-        assertTrue("Height should be positive", expectedHeight > 0)
-        assertTrue("Channels should be 3 for RGB", expectedChannels == 3)
+        // Test that model expects correct input dimensions using shared constants
+        assertTrue("Width should be positive", TestConstants.MODEL_INPUT_WIDTH > 0)
+        assertTrue("Height should be positive", TestConstants.MODEL_INPUT_HEIGHT > 0)
+        assertTrue("Channels should be 3 for RGB", TestConstants.MODEL_INPUT_CHANNELS == 3)
     }
 
     @Test
     fun testNormalizationValues() {
-        // Test normalization parameters
-        val mean = floatArrayOf(0.5f, 0.5f, 0.5f)
-        val std = floatArrayOf(0.5f, 0.5f, 0.5f)
+        // Test normalization parameters using shared constants
+        assertEquals("Mean should have 3 values", 3, TestConstants.MODEL_MEAN_VALUES.size)
+        assertEquals("Std should have 3 values", 3, TestConstants.MODEL_STD_VALUES.size)
         
-        assertEquals("Mean should have 3 values", 3, mean.size)
-        assertEquals("Std should have 3 values", 3, std.size)
-        
-        for (i in mean.indices) {
-            assertTrue("Mean values should be between 0 and 1", mean[i] in 0.0f..1.0f)
-            assertTrue("Std values should be positive", std[i] > 0.0f)
+        for (i in TestConstants.MODEL_MEAN_VALUES.indices) {
+            assertTrue("Mean values should be between 0 and 1", TestConstants.MODEL_MEAN_VALUES[i] in 0.0f..1.0f)
+            assertTrue("Std values should be positive", TestConstants.MODEL_STD_VALUES[i] > 0.0f)
         }
     }
 
