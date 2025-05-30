@@ -19,9 +19,29 @@ class MainViewModel(
     var state by mutableStateOf(MainScreenState())
         private set
 
+    // Track consecutive failures for recovery logic
+    private var consecutiveFailures = 0
+
     companion object {
         private const val TAG = "MainViewModel"
-    }    // Helper methods to reduce redundancy
+        private const val MAX_CONSECUTIVE_FAILURES = 2
+    }
+    
+    /**
+     * Initialize the model early to improve first detection performance
+     */
+    fun initializeModel(context: Context) {
+        viewModelScope.launch {
+            try {
+                val success = emotionDetectionRepository.initializeModel(context)
+                if (!success) {
+                    Log.w(TAG, "Failed to pre-initialize model")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error pre-initializing model", e)
+            }
+        }
+    }// Helper methods to reduce redundancy
     private fun updateStateWithError(message: String, exception: Exception? = null) {
         if (exception != null) {
             Log.e(TAG, "ERROR: $message", exception)
@@ -46,55 +66,84 @@ class MainViewModel(
             isLoading = false,
             detectedImage = detectedImage ?: state.detectedImage
         )
-    }
-
-    private fun safeBitmapRecycle(bitmap: Bitmap?) {
-        if (bitmap != null && !bitmap.isRecycled) {
-            bitmap.recycle()
+    }    private fun safeBitmapRecycle(bitmap: Bitmap?) {
+        try {
+            if (bitmap != null && !bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error recycling bitmap: ${e.message}")
         }
-    }    fun onEvent(event: MainScreenEvent) {
+    }fun onEvent(event: MainScreenEvent) {
         when (event) {
             is MainScreenEvent.ResetDetection -> resetDetection()
             is MainScreenEvent.CaptureImage,
             is MainScreenEvent.SelectFromGallery -> {} // Handled in Activity
         }
-    }fun handleImageResult(bitmap: Bitmap?, context: Context) {
-        // Recycle current bitmap
-        safeBitmapRecycle(state.detectedImage)
-        
+    }    fun handleImageResult(bitmap: Bitmap?, context: Context) {
+        // Don't recycle current bitmap yet - keep it until we successfully process the new one
         updateStateWithLoading("Processing image...")
         
         viewModelScope.launch {
             val result = emotionDetectionRepository.processImage(bitmap, context)
-            
-            when (result) {
+              when (result) {
                 is EmotionDetectionResult.Success -> {
+                    // Reset failure counter on success
+                    consecutiveFailures = 0
+                    // Only recycle old bitmap after successful processing
+                    val oldBitmap = state.detectedImage
                     updateStateWithSuccess(
                         result = result.emotion,
                         confidence = result.confidence,
                         detectedImage = result.visualizationBitmap
                     )
+                    // Safe to recycle old bitmap now
+                    safeBitmapRecycle(oldBitmap)
                 }
                 is EmotionDetectionResult.Error -> {
-                    updateStateWithError(result.message, result.exception)
+                    consecutiveFailures++
+                    Log.w(TAG, "Processing failed (consecutive failures: $consecutiveFailures)")
+                    
+                    // Force reload after multiple consecutive failures
+                    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                        Log.w(TAG, "Too many consecutive failures, forcing component reload")
+                        try {
+                            emotionDetectionRepository.forceReload()
+                            consecutiveFailures = 0 // Reset after forced reload
+                            updateStateWithError("Multiple failures detected - components reloaded. Please try again.")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to force reload", e)
+                            updateStateWithError("Critical error: ${result.message}", result.exception)
+                        }
+                    } else {
+                        updateStateWithError(result.message, result.exception)
+                    }
+                    // Keep the old image on error, don't recycle it
                 }
                 is EmotionDetectionResult.Loading -> {
                     updateStateWithLoading(result.message)
                 }
                 is EmotionDetectionResult.NoFacesDetected -> {
+                    // Reset failure counter on successful processing (even if no faces)
+                    consecutiveFailures = 0
+                    // Only recycle old bitmap after successful processing
+                    val oldBitmap = state.detectedImage
                     updateStateWithSuccess("No faces detected", detectedImage = result.originalBitmap)
+                    // Safe to recycle old bitmap now
+                    safeBitmapRecycle(oldBitmap)
                 }
             }
         }
     }    private fun resetDetection() {
         safeBitmapRecycle(state.detectedImage)
+        consecutiveFailures = 0 // Reset failure counter on manual reset
         state = state.copy(
             detectedImage = null,
             lastResult = "",
             lastConfidence = null,
             isLoading = false
         )
-    }    override fun onCleared() {
+    }override fun onCleared() {
         super.onCleared()
         safeBitmapRecycle(state.detectedImage)
         emotionDetectionRepository.cleanup()

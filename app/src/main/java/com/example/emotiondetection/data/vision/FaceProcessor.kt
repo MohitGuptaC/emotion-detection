@@ -18,13 +18,12 @@ import kotlin.math.min
  * Handles face detection and face-related image processing
  */
 class FaceProcessor {
-    
     private val faceDetector by lazy {
         val options = FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
             .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
             .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
-            .setMinFaceSize(0.1f)
+            .setMinFaceSize(0.15f) // Slightly larger for better performance
             .enableTracking()
             .build()
         FaceDetection.getClient(options)
@@ -33,26 +32,45 @@ class FaceProcessor {
     companion object {
         private const val TAG = "FaceProcessor"
     }
-    
-    suspend fun detectFaces(bitmap: Bitmap): List<Face> = suspendCoroutine { continuation ->
-        val image = InputImage.fromBitmap(bitmap, 0)
-        
-        faceDetector.process(image)
-            .addOnSuccessListener { faces ->
-                Log.d(TAG, "Found ${faces.size} face(s)")
-                continuation.resume(faces)
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Face detection failed", e)
+      suspend fun detectFaces(bitmap: Bitmap): List<Face> = suspendCoroutine { continuation ->
+        try {
+            if (bitmap.isRecycled) {
+                Log.e(TAG, "Cannot detect faces on recycled bitmap")
                 continuation.resume(emptyList())
+                return@suspendCoroutine
             }
-    }
-    
-    fun extractLargestFace(bitmap: Bitmap, faces: List<Face>): Bitmap? {
-        val largestFace = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
-            ?: return null
             
-        return extractFaceFromBitmap(bitmap, largestFace.boundingBox)
+            val image = InputImage.fromBitmap(bitmap, 0)
+            
+            faceDetector.process(image)
+                .addOnSuccessListener { faces ->
+                    Log.d(TAG, "Found ${faces.size} face(s)")
+                    continuation.resume(faces)
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Face detection failed", e)
+                    continuation.resume(emptyList())
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up face detection", e)
+            continuation.resume(emptyList())
+        }
+    }
+      fun extractLargestFace(bitmap: Bitmap, faces: List<Face>): Bitmap? {
+        try {
+            if (bitmap.isRecycled) {
+                Log.e(TAG, "Cannot extract face from recycled bitmap")
+                return null
+            }
+            
+            val largestFace = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+                ?: return null
+                
+            return extractFaceFromBitmap(bitmap, largestFace.boundingBox)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error extracting largest face", e)
+            return null
+        }
     }
     
     private fun extractFaceFromBitmap(bitmap: Bitmap, boundingBox: Rect): Bitmap? {

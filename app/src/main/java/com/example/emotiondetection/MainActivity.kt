@@ -39,8 +39,7 @@ class MainActivity : ComponentActivity() {
 
     private val cameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->        
-        if (isGranted) {
+    ) { isGranted ->          if (isGranted) {
             // Only launch camera if requested from Capture Image button
             if (shouldLaunchCameraAfterPermission) {
                 openCamera()
@@ -73,6 +72,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize model early to improve first detection performance
+        viewModel.initializeModel(this)
+        
         setContent {
             EmotionDetectionTheme {
                 MainScreenContent()

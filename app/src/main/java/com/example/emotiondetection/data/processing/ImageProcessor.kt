@@ -12,6 +12,10 @@ import kotlin.math.exp
  */
 class ImageProcessor {
     
+    // Pre-allocated buffers for better memory performance
+    private var cachedByteBuffer: ByteBuffer? = null
+    private var cachedIntArray: IntArray? = null
+    
     companion object {
         private const val TAG = "ImageProcessor"
         private const val INPUT_WIDTH = 224
@@ -20,9 +24,13 @@ class ImageProcessor {
         private val INPUT_MEAN = floatArrayOf(0.5f, 0.5f, 0.5f)
         private val INPUT_STD = floatArrayOf(0.5f, 0.5f, 0.5f)
     }
-    
-    fun preprocessForModel(bitmap: Bitmap): Bitmap? {
+      fun preprocessForModel(bitmap: Bitmap): Bitmap? {
         return try {
+            if (bitmap.isRecycled) {
+                Log.e(TAG, "Cannot preprocess recycled bitmap")
+                return null
+            }
+            
             Log.d(TAG, "Preprocessing face image:")
             Log.d(TAG, "  Target: ${INPUT_WIDTH}x${INPUT_HEIGHT}x${INPUT_CHANNELS}")
             Log.d(TAG, "  Original face: ${bitmap.width}x${bitmap.height}")
@@ -35,9 +43,14 @@ class ImageProcessor {
             val squareBitmap = Bitmap.createBitmap(
                 bitmap, xOffset, yOffset, minDimension, minDimension
             )
-
-            // Scale to required size using LANCZOS (similar to Python's LANCZOS)
-            val scaledBitmap = squareBitmap.scale(INPUT_WIDTH, INPUT_HEIGHT, true)
+            // Scale to required size using high-quality filtering
+            val scaledBitmap = if (minDimension == INPUT_WIDTH && minDimension == INPUT_HEIGHT) {
+                // Already correct size, just use the square bitmap
+                squareBitmap
+            } else {
+                // Use createScaledBitmap with filter=true for better quality
+                Bitmap.createScaledBitmap(squareBitmap, INPUT_WIDTH, INPUT_HEIGHT, true)
+            }
 
             // Convert to RGB format
             val finalBitmap = if (scaledBitmap.config != Bitmap.Config.ARGB_8888) {
@@ -57,16 +70,23 @@ class ImageProcessor {
             Log.e(TAG, "ERROR in face preprocessing: ${e.message}", e)
             null
         }
-    }
-    
-    fun bitmapToByteBuffer(bitmap: Bitmap): ByteBuffer? {
+    }    fun bitmapToByteBuffer(bitmap: Bitmap): ByteBuffer? {
         return try {
-            // Use FLOAT32 for normalized input (NCHW format)
+            if (bitmap.isRecycled) {
+                Log.e(TAG, "Cannot convert recycled bitmap to ByteBuffer")
+                return null
+            }
+            
+            // Always create fresh ByteBuffer to avoid corruption issues
             val bufferSize = 4 * INPUT_WIDTH * INPUT_HEIGHT * INPUT_CHANNELS
             val byteBuffer = ByteBuffer.allocateDirect(bufferSize)
             byteBuffer.order(ByteOrder.nativeOrder())
 
-            val intValues = IntArray(INPUT_WIDTH * INPUT_HEIGHT)
+            // Reuse int array if possible
+            val pixelCount = INPUT_WIDTH * INPUT_HEIGHT
+            val intValues = cachedIntArray?.takeIf { it.size == pixelCount }
+                ?: IntArray(pixelCount).also { cachedIntArray = it }
+                
             bitmap.getPixels(intValues, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
 
             Log.d(TAG, "Converting face to ByteBuffer (NCHW format):")
@@ -134,10 +154,14 @@ class ImageProcessor {
         
         return result
     }
-    
     private fun safeBitmapRecycle(bitmap: Bitmap?) {
         if (bitmap != null && !bitmap.isRecycled) {
             bitmap.recycle()
         }
+    }
+      fun cleanup() {
+        // Don't cache ByteBuffer anymore to prevent corruption
+        cachedByteBuffer = null
+        cachedIntArray = null
     }
 }
