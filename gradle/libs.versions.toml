@@ -1,5 +1,5 @@
 [versions]
-agp = "8.10.0"
+agp = "8.10.1"
 faceDetection = "16.1.7"
 kotlin = "1.9.25"
 coreKtx = "1.16.0"
@@ -7,8 +7,7 @@ junit = "4.13.2"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
 activity = "1.10.1"
-tensorflow = "2.17.0"
-tflite-metadata = "0.5.0"
+litert = "1.3.0"
 compose-bom = "2025.05.01"
 compose-compiler = "1.5.15"
 compose-material3 = "1.3.2"
@@ -18,13 +17,18 @@ visionCommon = "17.3.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
-face-detection = { module = "com.google.mlkit:face-detection", version.ref = "faceDetection" }
+androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
 junit = { module = "junit:junit", version.ref = "junit" }
 androidx-junit = { module = "androidx.test.ext:junit", version.ref = "junitVersion" }
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espressoCore" }
-androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
-tensorflow-lite = { module = "org.tensorflow:tensorflow-lite", version.ref = "tensorflow" }
-tensorflow-lite-metadata = { module = "org.tensorflow:tensorflow-lite-metadata", version.ref = "tflite-metadata" }
+
+# LiteRT dependencies (replaces TensorFlow Lite)
+litert = { module = "com.google.ai.edge.litert:litert", version.ref = "litert" }
+litert-support = { module = "com.google.ai.edge.litert:litert-support", version.ref = "litert" }
+litert-gpu = { module = "com.google.ai.edge.litert:litert-gpu", version.ref = "litert" }
+litert-gpu-api = { module = "com.google.ai.edge.litert:litert-gpu-api", version.ref = "litert" }
+
+# Compose dependencies
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
@@ -33,8 +37,13 @@ compose-material3 = { module = "androidx.compose.material3:material3", version.r
 compose-activity = { module = "androidx.activity:activity-compose", version.ref = "compose-activity" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+
+# Lifecycle dependencies
 lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle-runtime-compose" }
+
+# ML Kit dependencies
+face-detection = { module = "com.google.mlkit:face-detection", version.ref = "faceDetection" }
 vision-common = { module = "com.google.mlkit:vision-common", version.ref = "visionCommon" }
 
 [plugins]

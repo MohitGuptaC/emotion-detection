@@ -8,6 +8,7 @@ An Android application that uses machine learning to detect emotions from facial
 - **Gallery Integration**: Select existing images from the device gallery
 - **Face Detection**: Automatically detects faces in images using ML Kit
 - **Emotion Recognition**: Classifies emotions into 8 categories using a TensorFlow Lite model
+- **GPU Acceleration**: Utilizes GPU acceleration when available for faster inference
 - **Modern UI**: Built with Jetpack Compose for a responsive and intuitive interface
 
 ## Supported Emotions
@@ -26,14 +27,14 @@ The app can detect the following emotions:
 
 - **Language**: Kotlin
 - **UI Framework**: Jetpack Compose
-- **ML Framework**: TensorFlow Lite
+- **ML Framework**: LiteRT (TensorFlow Lite) with GPU acceleration
 - **Face Detection**: ML Kit Vision
 - **Architecture**: MVVM with ViewModels
 - **Build System**: Gradle with Kotlin DSL
 
 ## Requirements
 
-- Android API Level 24 (Android 7.0) or higher
+- Android API Level 28 (Android 9.0) or higher
 - Device with camera (for image capture)
 - Minimum 50MB free storage
 
@@ -44,6 +45,7 @@ The app uses a custom TensorFlow Lite model trained on the FER+ dataset:
 - **Output**: 8-class emotion probabilities
 - **Architecture**: MobileNetV3 optimized for mobile inference
 - **Format**: NCHW with normalization (mean=0.5, std=0.5)
+- **Acceleration**: GPU acceleration with automatic fallback to CPU when GPU is not available
 
 ## Installation
 

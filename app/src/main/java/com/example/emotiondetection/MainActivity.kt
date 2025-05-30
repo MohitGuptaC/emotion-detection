@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -107,11 +108,11 @@ class MainActivity : ComponentActivity() {
     // Helper method to reduce toast redundancy
     private fun showToast(messageResId: Int, duration: Int = Toast.LENGTH_SHORT) {
         Toast.makeText(this, getString(messageResId), duration).show()
-    }
-
+    }    
+    
     // Helper method to reduce error handling redundancy
-    private fun handleError(tag: String, action: String, exception: Exception, messageResId: Int) {
-        Log.e(tag, "Error $action: ${exception.message}")
+    private fun handleError(action: String, exception: Exception, messageResId: Int) {
+        Log.e(TAG, "Error $action: ${exception.message}")
         showToast(messageResId)
     }
 
@@ -157,9 +158,8 @@ class MainActivity : ComponentActivity() {
                 takePictureIntent,
                 { cameraLauncher.launch(it) },
                 R.string.no_camera_app_found
-            )
-        } catch (e: Exception) {
-            handleError(TAG, "launching camera", e, R.string.error_accessing_camera)
+            )        } catch (e: Exception) {
+            handleError("launching camera", e, R.string.error_accessing_camera)
         }
     }
 
@@ -170,9 +170,8 @@ class MainActivity : ComponentActivity() {
                 pickPhotoIntent,
                 { galleryLauncher.launch(it) },
                 R.string.no_gallery_app_found
-            )
-        } catch (e: Exception) {
-            handleError(TAG, "launching gallery", e, R.string.unable_to_select_image)
+            )        } catch (e: Exception) {
+            handleError("launching gallery", e, R.string.unable_to_select_image)
         }
     }
       
@@ -184,24 +183,22 @@ class MainActivity : ComponentActivity() {
                 @Suppress("DEPRECATION")
                 data?.extras?.getParcelable("data")
             }
-            processImageResult(imageBitmap)
-        } catch (e: Exception) {
-            handleError(TAG, "handling camera result", e, R.string.error_processing_image)
+            processImageResult(imageBitmap)        } catch (e: Exception) {
+            handleError("handling camera result", e, R.string.error_processing_image)
         }
-    }
-
-    private fun handleGalleryResult(data: Intent?) {
+    }    private fun handleGalleryResult(data: Intent?) {
         try {
             val imageUri = data?.data
             val imageBitmap = if (imageUri != null) {
-                MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
+                // Use modern ImageDecoder (API 28+ required)
+                val source = ImageDecoder.createSource(contentResolver, imageUri)
+                ImageDecoder.decodeBitmap(source)
             } else {
                 showToast(R.string.unable_to_select_image)
                 return
             }
-            processImageResult(imageBitmap)
-        } catch (e: Exception) {
-            handleError(TAG, "handling gallery result", e, R.string.error_processing_image)
+            processImageResult(imageBitmap)        } catch (e: Exception) {
+            handleError("handling gallery result", e, R.string.error_processing_image)
         }
     }
 

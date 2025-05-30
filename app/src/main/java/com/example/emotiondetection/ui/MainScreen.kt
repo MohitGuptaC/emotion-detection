@@ -121,8 +121,7 @@ fun MainScreen(
                     .weight(0.4f)
                     .padding(bottom = navigationBarsInsets.asPaddingValues().calculateBottomPadding()),
                 verticalArrangement = Arrangement.Bottom
-            ) {
-                // Capture Image Button
+            ) {                // Capture Image Button
                 CaptureButton(
                     enabled = !state.isLoading,
                     onClick = { onEvent(MainScreenEvent.CaptureImage) }
@@ -135,10 +134,8 @@ fun MainScreen(
                     enabled = !state.isLoading,
                     onClick = { onEvent(MainScreenEvent.SelectFromGallery) }
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Reset Button
+                
+                Spacer(modifier = Modifier.height(12.dp))                // Reset Button
                 ResetButton(
                     enabled = state.detectedImage != null && !state.isLoading,
                     onClick = { onEvent(MainScreenEvent.ResetDetection) }
