@@ -20,7 +20,7 @@ android {
         }
     }
 
-    /*signingConfigs {
+    signingConfigs {
         // For CI/CD or environment-based signing (e.g., GitHub Actions), use this block:
         create("release") {
             storeFile = file(System.getenv("ORG_GRADLE_PROJECT_storeFile"))
@@ -30,7 +30,7 @@ android {
         }
         // For local Android Studio builds, you can comment out the above block entirely.
         // Android Studio's "Generate Signed Bundle / APK" wizard lets you pick the keystore and credentials interactively.
-    }*/
+    }
 
     buildTypes {
         release {
