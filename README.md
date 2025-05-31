@@ -65,8 +65,10 @@ The app uses a custom TensorFlow Lite model trained on the FER+ dataset:
 ## Permissions
 
 The app requires the following permissions:
-- `CAMERA`: For capturing images
-- No storage permissions needed (uses scoped storage)
+- `CAMERA`: For capturing images using the device camera
+- `READ_MEDIA_IMAGES`: For selecting images from the device gallery (Android 13+)
+- `READ_MEDIA_VIDEO`: For potential video file access (Android 13+)
+- `READ_MEDIA_AUDIO`: For potential audio file access (Android 13+)
 
 ## Development
 
