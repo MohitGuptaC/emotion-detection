@@ -68,25 +68,6 @@ The app requires the following permissions:
 - `CAMERA`: For capturing images
 - No storage permissions needed (uses scoped storage)
 
-## Project Structure
-
-```
-app/
-├── src/main/
-│   ├── java/com/example/emotiondetection/
-│   │   ├── MainActivity.kt              # Main activity
-│   │   └── ui/
-│   │       ├── MainScreen.kt           # Compose UI screens
-│   │       ├── MainScreenState.kt      # UI state management
-│   │       ├── MainViewModel.kt        # Business logic & ML inference
-│   │       └── theme/                  # App theming
-│   ├── assets/
-│   │   └── metadata.tflite            # Emotion detection model
-│   └── res/                           # App resources
-├── src/test/                          # Unit tests
-└── src/androidTest/                   # Instrumented tests
-```
-
 ## Development
 
 ### Building the Project
