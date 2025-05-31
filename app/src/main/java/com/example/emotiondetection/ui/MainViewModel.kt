@@ -41,7 +41,9 @@ class MainViewModel(
                 Log.e(TAG, "Error pre-initializing model", e)
             }
         }
-    }// Helper methods to reduce redundancy
+    }
+    
+    // Helper methods to reduce redundancy
     private fun updateStateWithError(message: String, exception: Exception? = null) {
         if (exception != null) {
             Log.e(TAG, "ERROR: $message", exception)
@@ -59,14 +61,18 @@ class MainViewModel(
             isLoading = true,
             lastConfidence = null
         )
-    }    private fun updateStateWithSuccess(result: String, confidence: Float? = null, detectedImage: Bitmap? = null) {
+    }    
+    
+    private fun updateStateWithSuccess(result: String, confidence: Float? = null, detectedImage: Bitmap? = null) {
         state = state.copy(
             lastResult = result,
             lastConfidence = confidence,
             isLoading = false,
             detectedImage = detectedImage ?: state.detectedImage
         )
-    }    private fun safeBitmapRecycle(bitmap: Bitmap?) {
+    }    
+    
+    private fun safeBitmapRecycle(bitmap: Bitmap?) {
         try {
             if (bitmap != null && !bitmap.isRecycled) {
                 bitmap.recycle()
@@ -74,13 +80,17 @@ class MainViewModel(
         } catch (e: Exception) {
             Log.w(TAG, "Error recycling bitmap: ${e.message}")
         }
-    }fun onEvent(event: MainScreenEvent) {
+    }
+    
+    fun onEvent(event: MainScreenEvent) {
         when (event) {
             is MainScreenEvent.ResetDetection -> resetDetection()
             is MainScreenEvent.CaptureImage,
             is MainScreenEvent.SelectFromGallery -> {} // Handled in Activity
         }
-    }    fun handleImageResult(bitmap: Bitmap?, context: Context) {
+    }    
+    
+    fun handleImageResult(bitmap: Bitmap?, context: Context) {
         // Don't recycle current bitmap yet - keep it until we successfully process the new one
         updateStateWithLoading("Processing image...")
         
@@ -134,7 +144,9 @@ class MainViewModel(
                 }
             }
         }
-    }    private fun resetDetection() {
+    }    
+    
+    private fun resetDetection() {
         safeBitmapRecycle(state.detectedImage)
         consecutiveFailures = 0 // Reset failure counter on manual reset
         state = state.copy(
@@ -143,7 +155,9 @@ class MainViewModel(
             lastConfidence = null,
             isLoading = false
         )
-    }override fun onCleared() {
+    }
+    
+    override fun onCleared() {
         super.onCleared()
         safeBitmapRecycle(state.detectedImage)
         emotionDetectionRepository.cleanup()

@@ -6,6 +6,7 @@ import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Manages TensorFlow Lite model loading and inference
@@ -26,19 +27,17 @@ class TensorFlowModelManager {
     
     fun loadModel(context: Context): Boolean {
         return try {
-            Log.d(TAG, "=== LOADING MODEL ===")
-
-            // Load model
-            val assetFileDescriptor = context.assets.openFd(MODEL_FILE)
-            val inputStream = java.io.FileInputStream(assetFileDescriptor.fileDescriptor)
-            val fileChannel = inputStream.channel
-            val startOffset = assetFileDescriptor.startOffset
-            val declaredLength = assetFileDescriptor.declaredLength
-            val modelBuffer = fileChannel.map(
-                java.nio.channels.FileChannel.MapMode.READ_ONLY, 
-                startOffset, 
-                declaredLength
-            )            
+            Log.d(TAG, "=== LOADING MODEL ===")            // Load model using Kotlin-friendly approach
+            val modelBuffer = context.assets.openFd(MODEL_FILE).use { assetFileDescriptor ->
+                assetFileDescriptor.createInputStream().use { inputStream ->
+                    val fileChannel = inputStream.channel
+                    fileChannel.map(
+                        java.nio.channels.FileChannel.MapMode.READ_ONLY,
+                        assetFileDescriptor.startOffset,
+                        assetFileDescriptor.declaredLength
+                    )
+                }
+            }
             // Create interpreter with GPU delegate if available
             val options = Interpreter.Options()
             options.setNumThreads(4)
@@ -93,7 +92,9 @@ class TensorFlowModelManager {
             Log.e(TAG, "ERROR loading model: ${e.message}", e)
             false
         }
-    }    fun runInference(inputBuffer: ByteBuffer): FloatArray? {
+    }    
+    
+    fun runInference(inputBuffer: ByteBuffer): FloatArray? {
         return try {
             if (interpreter == null) {
                 Log.e(TAG, "ERROR: Interpreter not initialized")
@@ -133,8 +134,7 @@ class TensorFlowModelManager {
                     gpuDelegate?.close()
                     gpuDelegate = null
                     interpreter = null
-                    
-                    Log.w(TAG, "Interpreter reset due to GPU issues. Model needs to be reloaded.")
+                      Log.w(TAG, "Interpreter reset due to GPU issues. Model needs to be reloaded.")
                 } catch (recoveryException: Exception) {
                     Log.e(TAG, "Failed to recover from GPU error: ${recoveryException.message}")
                 }
@@ -142,10 +142,9 @@ class TensorFlowModelManager {
             
             null
         }
-    }    fun getEmotionLabels(): Array<String> = EMOTION_LABELS
+    }
     
-    fun isModelLoaded(): Boolean = interpreter != null
-    
+    fun getEmotionLabels(): Array<String> = EMOTION_LABELS
     fun needsReload(): Boolean = interpreter == null
     
     /**
@@ -155,7 +154,8 @@ class TensorFlowModelManager {
         Log.i(TAG, "Forcing model reload...")
         close()
     }
-      /**
+
+    /**
      * Check if the interpreter is in a healthy state for inference
      */
     fun isInterpreterHealthy(): Boolean {
@@ -177,12 +177,12 @@ class TensorFlowModelManager {
         }
     }
     
-    private fun warmUpModel() {
+    private fun warmUpModel() {        
         try {
             Log.d(TAG, "Warming up model with dummy inference...")
             // Create dummy input buffer with correct size
-            val dummyBuffer = java.nio.ByteBuffer.allocateDirect(4 * 224 * 224 * 3)
-            dummyBuffer.order(java.nio.ByteOrder.nativeOrder())
+            val dummyBuffer = ByteBuffer.allocateDirect(4 * 224 * 224 * 3)
+            dummyBuffer.order(ByteOrder.nativeOrder())
             
             // Fill with dummy normalized data (0.0f)
             repeat(224 * 224 * 3) {
@@ -199,6 +199,7 @@ class TensorFlowModelManager {
             Log.w(TAG, "Model warm-up failed, but continuing: ${e.message}")
         }
     }
+
     fun close() {
         try {
             interpreter?.close()

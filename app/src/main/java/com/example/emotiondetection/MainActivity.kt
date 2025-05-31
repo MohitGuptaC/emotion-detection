@@ -186,10 +186,13 @@ class MainActivity : ComponentActivity() {
                 @Suppress("DEPRECATION")
                 data?.extras?.getParcelable("data")
             }
-            processImageResult(imageBitmap)        } catch (e: Exception) {
+            processImageResult(imageBitmap)   
+        } catch (e: Exception) {
             handleError("handling camera result", e, R.string.error_processing_image)
         }
-    }    private fun handleGalleryResult(data: Intent?) {
+    }    
+    
+    private fun handleGalleryResult(data: Intent?) {
         try {
             val imageUri = data?.data
             val imageBitmap = if (imageUri != null) {
@@ -200,7 +203,8 @@ class MainActivity : ComponentActivity() {
                 showToast(R.string.unable_to_select_image)
                 return
             }
-            processImageResult(imageBitmap)        } catch (e: Exception) {
+            processImageResult(imageBitmap)
+        } catch (e: Exception) {
             handleError("handling gallery result", e, R.string.error_processing_image)
         }
     }

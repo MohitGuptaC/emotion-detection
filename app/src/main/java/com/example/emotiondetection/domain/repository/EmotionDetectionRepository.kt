@@ -51,7 +51,9 @@ class EmotionDetectionRepository(
                 false
             }
         }
-    }    suspend fun processImage(bitmap: Bitmap?, context: Context): EmotionDetectionResult {
+    }    
+    
+    suspend fun processImage(bitmap: Bitmap?, context: Context): EmotionDetectionResult {
         return withContext(Dispatchers.Default) {
             val totalStartTime = System.currentTimeMillis()
             try {
@@ -148,7 +150,9 @@ class EmotionDetectionRepository(
                 EmotionDetectionResult.Error("Error processing image", e)
             }
         }
-    }      private fun safeBitmapRecycle(bitmap: Bitmap?) {
+    }      
+    
+    private fun safeBitmapRecycle(bitmap: Bitmap?) {
         try {
             if (bitmap != null && !bitmap.isRecycled) {
                 bitmap.recycle()
