@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.compiler)
 }
 
 android {
@@ -65,7 +66,6 @@ android {
         compose = true
         mlModelBinding = true
     }
-
     packaging {
         resources {
             excludes += listOf("META-INF/LICENSE.md", "META-INF/LICENSE-notice.md")
