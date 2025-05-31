@@ -82,11 +82,9 @@ dependencies {
     
     // LiteRT core dependencies (replaces TensorFlow Lite)
     implementation(libs.litert)
-    implementation(libs.litert.support)
     
     // LiteRT GPU acceleration dependencies
     implementation(libs.litert.gpu)
-    implementation(libs.litert.gpu.api)
     
     // Compose dependencies
     implementation(platform(libs.compose.bom))

@@ -23,9 +23,7 @@ androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", vers
 
 # LiteRT dependencies (replaces TensorFlow Lite)
 litert = { module = "com.google.ai.edge.litert:litert", version.ref = "litert" }
-litert-support = { module = "com.google.ai.edge.litert:litert-support", version.ref = "litert" }
 litert-gpu = { module = "com.google.ai.edge.litert:litert-gpu", version.ref = "litert" }
-litert-gpu-api = { module = "com.google.ai.edge.litert:litert-gpu-api", version.ref = "litert" }
 
 # Compose dependencies
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
