@@ -2,6 +2,10 @@
 
 An Android application that uses machine learning to detect emotions from facial expressions in real-time using camera capture or gallery images.
 
+## Dataset
+This project uses the FER+ image classification dataset from:
+> Barsoum, E., Zhang, C., Canton Ferrer, C., & Zhang, Z. (2016). Training deep networks for facial expression recognition with crowd-sourced label distribution. In Proceedings of the 18th ACM International Conference on Multimodal Interaction (ICMI '16) (pp. 279–283). ACM.
+
 ## Features
 
 - **Real-time Camera Capture**: Take photos using the device camera for emotion analysis
