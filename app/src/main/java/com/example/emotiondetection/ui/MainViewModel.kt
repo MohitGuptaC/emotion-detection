@@ -85,11 +85,56 @@ class MainViewModel(
     fun onEvent(event: MainScreenEvent) {
         when (event) {
             is MainScreenEvent.ResetDetection -> resetDetection()
-            is MainScreenEvent.CaptureImage,
-            is MainScreenEvent.SelectFromGallery -> {} // Handled in Activity
+            is MainScreenEvent.StartMonitoring,
+            is MainScreenEvent.SelectFromGallery,
+            is MainScreenEvent.SelectMusic -> {} // Handled in Activity
         }
     }    
     
+    fun updateMusicStatus(isGenerated: Boolean?, emotion: String?) {
+        state = state.copy(
+            musicIsGenerated = isGenerated,
+            musicEmotion = emotion ?: ""
+        )
+    }
+
+    fun updateMonitoring(isMonitoring: Boolean) {
+        state = state.copy(isMonitoring = isMonitoring)
+    }
+    
+    /**
+     * Continuous monitoring path: process a frame without showing loading states
+     * or replacing the displayed bitmap. Suppresses 'No faces detected' updates
+     * to avoid UI flicker; only updates when we have a positive result.
+     */
+    fun handleContinuousFrame(bitmap: Bitmap?, context: Context) {
+        viewModelScope.launch {
+            try {
+                when (val result = emotionDetectionRepository.processImage(bitmap, context)) {
+                    is EmotionDetectionResult.Success -> {
+                        // Update only key fields; do not set isLoading or replace image
+                        state = state.copy(
+                            lastResult = result.emotion,
+                            lastConfidence = result.confidence,
+                            isLoading = false
+                        )
+                    }
+                    is EmotionDetectionResult.NoFacesDetected -> {
+                        // Suppress updating UI to avoid flicker; keep previous state
+                    }
+                    is EmotionDetectionResult.Error -> {
+                        // Suppress frequent error messages during live monitoring
+                    }
+                    is EmotionDetectionResult.Loading -> {
+                        // Ignore loading in continuous path
+                    }
+                }
+            } catch (e: Exception) {
+                // Suppress exceptions in continuous path
+            }
+        }
+    }
+
     fun handleImageResult(bitmap: Bitmap?, context: Context) {
         // Don't recycle current bitmap yet - keep it until we successfully process the new one
         updateStateWithLoading("Processing image...")

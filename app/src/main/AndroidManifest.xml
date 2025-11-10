@@ -12,6 +12,11 @@
             <action android:name="android.intent.action.PICK" />
             <data android:mimeType="image/*" />
         </intent>
+        <!-- Audio file picker apps -->
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="audio/*" />
+        </intent>
     </queries>
 
     <uses-feature

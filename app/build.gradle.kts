@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.example.emotiondetection"
-    compileSdk = 35
+    compileSdk = 36
     
     defaultConfig {
         applicationId = "com.example.emotiondetection"
         minSdk = 28
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -21,7 +21,7 @@ android {
         }
     }
 
-    signingConfigs {
+    /*signingConfigs {
         // For CI/CD or environment-based signing (e.g., GitHub Actions), use this block:
         create("release") {
             storeFile = file(System.getenv("ORG_GRADLE_PROJECT_storeFile"))
@@ -31,18 +31,18 @@ android {
         }
         // For local Android Studio builds, you can comment out the above block entirely.
         // Android Studio's "Generate Signed Bundle / APK" wizard lets you pick the keystore and credentials interactively.
-    }
+    }*/
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release") //comment this line if you want to use Android Studio's interactive signing wizard
+            //signingConfig = signingConfigs.getByName("release") //comment this line if you want to use Android Studio's interactive signing wizard
         }
     }
 
@@ -103,4 +103,10 @@ dependencies {
     // ML Kit dependencies
     implementation(libs.face.detection)
     implementation(libs.vision.common)
+
+    // CameraX for continuous monitoring
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
 }

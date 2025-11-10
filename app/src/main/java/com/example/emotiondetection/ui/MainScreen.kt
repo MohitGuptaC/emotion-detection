@@ -63,9 +63,32 @@ fun MainScreen(
                     .padding(top = 8.dp),
                 verticalArrangement = Arrangement.Center
             ) {
-                // Image Preview
-                ImagePreview(
-                    bitmap = state.detectedImage,
+                // Live Camera Preview + Face Overlay (when available)
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { context ->
+                        val previewView = androidx.camera.view.PreviewView(context).apply {
+                            scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
+                        }
+                        // Overlay on top of preview
+                        val overlay = FaceOverlayView(context)
+                        // Let activity bind the views
+                        (context as? android.app.Activity)?.let { activity ->
+                            if (activity is com.example.emotiondetection.MainActivity) {
+                                activity.bindPreview(previewView, overlay)
+                            }
+                        }
+                        // Compose needs a single View; wrap both in a FrameLayout
+                        android.widget.FrameLayout(context).apply {
+                            addView(previewView, android.widget.FrameLayout.LayoutParams(
+                                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                            ))
+                            addView(overlay, android.widget.FrameLayout.LayoutParams(
+                                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                            ))
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(0.7f)
@@ -110,6 +133,26 @@ fun MainScreen(
                                 modifier = Modifier.padding(top = 4.dp)
                             )
                         }
+                        val musicStatus = when (state.musicIsGenerated) {
+                            null -> stringResource(id = R.string.music_status_none)
+                            true -> stringResource(
+                                id = R.string.music_status,
+                                stringResource(id = R.string.music_generated),
+                                state.musicEmotion.ifEmpty { state.lastResult }
+                            )
+                            false -> stringResource(
+                                id = R.string.music_status,
+                                stringResource(id = R.string.music_default),
+                                state.musicEmotion.ifEmpty { state.lastResult }
+                            )
+                        }
+                        Text(
+                            text = musicStatus,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
                     }
                 }
             }
@@ -121,10 +164,10 @@ fun MainScreen(
                     .weight(0.4f)
                     .padding(bottom = navigationBarsInsets.asPaddingValues().calculateBottomPadding()),
                 verticalArrangement = Arrangement.Bottom
-            ) {                // Capture Image Button
-                CaptureButton(
-                    enabled = !state.isLoading,
-                    onClick = { onEvent(MainScreenEvent.CaptureImage) }
+            ) {                // Start Monitoring Button
+                StartMonitoringButton(
+                    enabled = !state.isLoading && !state.isMonitoring,
+                    onClick = { onEvent(MainScreenEvent.StartMonitoring) }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -135,9 +178,17 @@ fun MainScreen(
                     onClick = { onEvent(MainScreenEvent.SelectFromGallery) }
                 )
                 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Select Music Button
+                SelectMusicButton(
+                    enabled = !state.isLoading,
+                    onClick = { onEvent(MainScreenEvent.SelectMusic) }
+                )
+                
                 Spacer(modifier = Modifier.height(12.dp))                // Reset Button
                 ResetButton(
-                    enabled = state.detectedImage != null && !state.isLoading,
+                    enabled = (!state.isLoading && (state.isMonitoring || state.lastResult.isNotEmpty() || state.musicIsGenerated != null)),
                     onClick = { onEvent(MainScreenEvent.ResetDetection) }
                 )
             }
@@ -209,12 +260,12 @@ private fun ActionButton(
 }
 
 @Composable
-private fun CaptureButton(
+private fun StartMonitoringButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
     ActionButton(
-        text = stringResource(R.string.capture_image),
+        text = "Start", // Consider moving to strings.xml if needed
         enabled = enabled,
         onClick = onClick
     )
@@ -239,6 +290,18 @@ private fun SelectFromGalleryButton(
 ) {
     ActionButton(
         text = stringResource(R.string.select_from_gallery),
+        enabled = enabled,
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun SelectMusicButton(
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    ActionButton(
+        text = stringResource(R.string.select_music),
         enabled = enabled,
         onClick = onClick
     )

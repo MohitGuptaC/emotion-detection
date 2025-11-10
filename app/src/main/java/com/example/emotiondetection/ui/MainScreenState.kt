@@ -11,14 +11,18 @@ data class MainScreenState(
     val detectedImage: Bitmap? = null,
     val lastResult: String = "",
     val lastConfidence: Float? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isMonitoring: Boolean = false,
+    val musicIsGenerated: Boolean? = null, // null = not playing, true = generated, false = default
+    val musicEmotion: String = ""
 )
 
 /**
  * Events that can be triggered from the UI
  */
 sealed class MainScreenEvent {
-    data object CaptureImage : MainScreenEvent()
+    data object StartMonitoring : MainScreenEvent()
     data object SelectFromGallery : MainScreenEvent()
     data object ResetDetection : MainScreenEvent()
+    data object SelectMusic : MainScreenEvent()
 }
