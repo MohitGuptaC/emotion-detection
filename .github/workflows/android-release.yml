@@ -12,6 +12,7 @@ on:
       - 'gradle.properties'               # Gradle properties
       - 'gradle/libs.versions.toml'       # Dependency versions
       - '.github/workflows/android-release.yml'  # Workflow itself
+  workflow_dispatch:                              # Manual trigger
 
 permissions:
   contents: write
@@ -100,3 +101,5 @@ jobs:
             ${{ env.APK_V8 }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+          #manual trigger comment
