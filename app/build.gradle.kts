@@ -35,8 +35,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -59,9 +59,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // kotlinOptions.jvmTarget is deprecated; configure Kotlin compiler via the
+    // top-level `kotlin { compilerOptions { ... } }` DSL instead (Kotlin Gradle plugin 1.9+).
     buildFeatures {
         compose = true
         mlModelBinding = true
@@ -70,6 +69,14 @@ android {
         resources {
             excludes += listOf("META-INF/LICENSE.md", "META-INF/LICENSE-notice.md")
         }
+    }
+}
+
+// Configure Kotlin compiler options using the new compilerOptions DSL
+kotlin {
+    compilerOptions {
+        // Use the JvmTarget enum to set the target JVM version
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 

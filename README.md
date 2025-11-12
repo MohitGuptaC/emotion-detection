@@ -12,6 +12,7 @@ This project uses the FER+ image classification dataset from:
 - **Gallery Integration**: Select existing images from the device gallery
 - **Face Detection**: Automatically detects faces in images using ML Kit
 - **Emotion Recognition**: Classifies emotions into 8 categories using a TensorFlow Lite model
+- **Pre-generated Music Playback**: Chooses emotion-specific playlists (two sets per emotion) and plays a random 30-second track
 - **GPU Acceleration**: Utilizes GPU acceleration when available for faster inference
 - **Modern UI**: Built with Jetpack Compose for a responsive and intuitive interface
 
@@ -65,6 +66,26 @@ The app uses a custom TensorFlow Lite model trained on the FER+ dataset:
 3. **Select from Gallery**: Tap "Select from Gallery" to choose an existing image
 4. **View Results**: The detected emotion and confidence score will be displayed
 5. **Reset**: Tap "Reset" to clear the current result and start over
+
+### Pre-generated Music Assets
+
+Place your audio tracks under `app/src/main/assets/pre_generated_music/<emotion>/set1` and `set2` folders. Each folder can contain multiple tracks (e.g., 3–4 files) for variety. Example layout:
+
+```
+app/src/main/assets/pre_generated_music/
+	happiness/
+		set1/
+			track1.mp3
+			track2.mp3
+		set2/
+			track1.mp3
+			track2.mp3
+	sadness/
+		set1/
+			...
+```
+
+During the first 10-second detection window, the app measures how often the leading emotion appears. If it is detected at least 50% of the time, set1 is selected; otherwise set2 is used. A random track from the chosen set plays for 30 seconds. If the new folders are empty, the app falls back to any legacy assets located under `assets/default_music/`.
 
 ## Permissions
 

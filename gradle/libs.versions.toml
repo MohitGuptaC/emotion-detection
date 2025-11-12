@@ -1,5 +1,5 @@
 [versions]
-agp = "8.12.3"
+agp = "8.13.1"
 faceDetection = "16.1.7"
 kotlin = "2.2.21"
 coreKtx = "1.17.0"
@@ -13,7 +13,7 @@ compose-material3 = "1.4.0"
 compose-activity = "1.11.0"
 lifecycle-runtime-compose = "2.9.4"
 visionCommon = "17.3.0"
-cameraX = "1.4.0"
+cameraX = "1.5.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }

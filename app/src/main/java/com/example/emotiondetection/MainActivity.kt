@@ -7,9 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.media.MediaPlayer
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
@@ -71,9 +69,11 @@ class MainActivity : ComponentActivity() {
     private val aggregatorConfidenceThreshold = 0.55f
     private lateinit var emotionAggregator: EmotionAggregator
     private val cadenceHandler by lazy { android.os.Handler(mainLooper) }
-    // Stored in uptime millis, because Handler.postAtTime expects uptime values
-    private var nextBoundaryMs: Long? = null
-    private var useFixedCadence: Boolean = true
+    private val detectionWindowMs = 10_000L
+    private val playbackDurationMs = 30_000L
+    private val detectionWindowRunnable = Runnable { completeDetectionWindow() }
+    private var isDetectionWindowActive: Boolean = false
+    private var pendingDetectionStart: Runnable? = null
     
     // CameraX monitoring
     private var cameraExecutor: ExecutorService? = null
@@ -102,16 +102,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val cameraLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            handleCameraResult(result.data)
-        } else {
-            showToast(R.string.image_capture_cancelled)
-        }
-    }
-
     private val galleryLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -137,13 +127,11 @@ class MainActivity : ComponentActivity() {
         viewModel.initializeModel(this)
         musicManager = MusicManager(
             context = this,
-            defaultWindowMs = 60_000L,
-            onRequestGeneratedTrack = null, // Wire to backend when ready
             onPlaybackStatusChanged = { isGenerated, emotion ->
                 viewModel.updateMusicStatus(isGenerated, emotion)
             }
         )
-    emotionAggregator = EmotionAggregator(confidenceThreshold = aggregatorConfidenceThreshold)
+        emotionAggregator = EmotionAggregator(confidenceThreshold = aggregatorConfidenceThreshold)
         
         setContent {
             EmotionDetectionTheme {
@@ -161,7 +149,6 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(checkCameraPermissionOnStart) {
             if (checkCameraPermissionOnStart) {
                 requestCameraPermissionOnly()
-                checkCameraPermissionOnStart = false
             }
         }
         
@@ -175,11 +162,11 @@ class MainActivity : ComponentActivity() {
                     is MainScreenEvent.ResetDetection -> {
                         stopMonitoring()
                         musicManager.stopPlayback()
+                        viewModel.updateMusicStatus(null, "")
                         clearOverlay()
                         emotionAggregator.reset()
                         viewModel.onEvent(event)
                     }
-                    else -> viewModel.onEvent(event)
                 }
             }
         )
@@ -191,7 +178,9 @@ class MainActivity : ComponentActivity() {
                 if (supportedEmotionLabels.contains(state.lastResult) && conf >= aggregatorConfidenceThreshold) {
                     lastRecognizedEmotion = state.lastResult
                 }
-                emotionAggregator.add(state.lastResult, conf)
+                if (isDetectionWindowActive) {
+                    emotionAggregator.add(state.lastResult, conf)
+                }
             }
         }
     }
@@ -240,13 +229,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Suppress("OPT_IN_ARGUMENT_IS_NOT_MARKER")
     @androidx.annotation.OptIn(ExperimentalGetImage::class)
     @OptIn(ExperimentalGetImage::class)
     private fun startMonitoring() {
         if (isMonitoring) return
-        isMonitoring = true
-        cameraExecutor = Executors.newSingleThreadExecutor()
-        startFixedCadenceIfNeeded()
+    isMonitoring = true
+    cameraExecutor = Executors.newSingleThreadExecutor()
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             try {
@@ -255,19 +244,18 @@ class MainActivity : ComponentActivity() {
                 cameraProvider.unbindAll()
 
                 val previewUseCase = androidx.camera.core.Preview.Builder().build().also { preview ->
-                    preview.setSurfaceProvider(previewView?.surfaceProvider)
+                    preview.surfaceProvider = previewView?.surfaceProvider
                 }
                 imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also { analysis ->
-                        var lastProcessed = 0L
+                        val lastProcessed = 0L
                         analysis.setAnalyzer(cameraExecutor!!) { imageProxy ->
                             try {
                                 // Throttle processing (e.g., every 750ms)
                                 val now = System.currentTimeMillis()
                                 if (now - lastProcessed >= 1000) {
-                                    lastProcessed = now
                                     val bitmap = imageProxy.toBitmapCorrected()
                                     // Use lightweight continuous path so UI doesn’t flicker while still sharing the
                                     // same ML pipeline output semantics as gallery capture.
@@ -295,6 +283,7 @@ class MainActivity : ComponentActivity() {
 
                 val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
                 cameraProvider.bindToLifecycle(this, cameraSelector, previewUseCase, imageAnalysis)
+                startDetectionWindow()
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting monitoring: ${e.message}")
                 isMonitoring = false
@@ -312,13 +301,13 @@ class MainActivity : ComponentActivity() {
         cameraExecutor?.shutdownNow()
         cameraExecutor = null
         isMonitoring = false
-        cancelCadence()
-        viewModel.updateMonitoring(false)
-    }
-
-    private fun cancelCadence() {
-        nextBoundaryMs = null
         cadenceHandler.removeCallbacksAndMessages(null)
+        pendingDetectionStart = null
+        isDetectionWindowActive = false
+        musicManager.stopPlayback(triggerCallback = false)
+        viewModel.updateMusicStatus(null, "")
+        emotionAggregator.reset()
+        viewModel.updateMonitoring(false)
     }
 
     private fun launchGallery() {
@@ -332,21 +321,7 @@ class MainActivity : ComponentActivity() {
             handleError("launching gallery", e, R.string.unable_to_select_image)
         }
     }
-      
-    private fun handleCameraResult(data: Intent?) {
-        try {
-            val imageBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                data?.extras?.getParcelable("data", Bitmap::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                data?.extras?.getParcelable("data")
-            }
-            processImageResult(imageBitmap)   
-        } catch (e: Exception) {
-            handleError("handling camera result", e, R.string.error_processing_image)
-        }
-    }    
-    
+
     private fun handleGalleryResult(data: Intent?) {
         try {
             val imageUri = data?.data
@@ -387,7 +362,7 @@ class MainActivity : ComponentActivity() {
                 // Mirror horizontally because we use the front camera
                 postScale(-1f, 1f, raw.width / 2f, raw.height / 2f)
             }
-            val corrected = android.graphics.Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+            val corrected = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
             if (corrected != raw && !raw.isRecycled) {
                 raw.recycle()
             }
@@ -427,7 +402,7 @@ class MainActivity : ComponentActivity() {
         val yPixelStride = yPlane.pixelStride
         for (row in 0 until height) {
             var inputOffset = row * yRowStride
-            for (col in 0 until width) {
+            for (_ in 0 until width) {
                 nv21[outputPos++] = yBytes[inputOffset]
                 inputOffset += yPixelStride
             }
@@ -441,7 +416,7 @@ class MainActivity : ComponentActivity() {
         for (row in 0 until height / 2) {
             var uOffset = row * uRowStride
             var vOffset = row * vRowStride
-            for (col in 0 until width / 2) {
+            for (_ in 0 until width / 2) {
                 nv21[uvPos++] = vBytes[vOffset]
                 nv21[uvPos++] = uBytes[uOffset]
                 uOffset += uPixelStride
@@ -530,52 +505,76 @@ class MainActivity : ComponentActivity() {
         stopMonitoring()
     }
 
-    // Fixed cadence: boundaries at 10s, 70s, 130s ... from start
-    private fun startFixedCadenceIfNeeded() {
-        if (!useFixedCadence) return
-        if (nextBoundaryMs != null) return
-        val now = SystemClock.uptimeMillis()
-        val firstBoundary = now + 10_000L
-        nextBoundaryMs = firstBoundary
-        scheduleBoundary(firstBoundary)
-    }
-
-    private fun scheduleBoundary(boundaryTime: Long) {
-        cadenceHandler.postAtTime({ onBoundary(boundaryTime) }, boundaryTime)
-        // Also schedule detection window end at boundary + 10s
-        val detectEnd = boundaryTime + 10_000L
-        cadenceHandler.postAtTime({ onDetectWindowEnd(detectEnd) }, detectEnd)
-    }
-
-    private fun onBoundary(boundaryTime: Long) {
-        // Winner from previous 10s window ends at boundaryTime
-        val winner = emotionAggregator.currentWinner()
-        val fallbackFromState = viewModel.state.lastResult.takeIf { supportedEmotionLabels.contains(it) }
-        val emotionToPlay = when {
-            !winner.isNullOrBlank() && supportedEmotionLabels.contains(winner) -> winner
-            fallbackFromState != null -> fallbackFromState
-            else -> lastRecognizedEmotion
-        }
-        if (!emotionToPlay.isNullOrBlank()) {
-            musicManager.onEmotionDetected(emotionToPlay)
-        } else {
-            Log.d(TAG, "No valid emotion detected for playback window ending at $boundaryTime")
-        }
-        // Start next detection window [boundary, boundary+10]
+    private fun startDetectionWindow() {
+        cancelPendingDetectionStart()
+        cadenceHandler.removeCallbacks(detectionWindowRunnable)
+        isDetectionWindowActive = true
         emotionAggregator.reset()
-        // Schedule next boundary +60s
-        val next = boundaryTime + 60_000L
-        nextBoundaryMs = next
-        scheduleBoundary(next)
+        cadenceHandler.postDelayed(detectionWindowRunnable, detectionWindowMs)
     }
 
-    private fun onDetectWindowEnd(detectEndTime: Long) {
-        // Detection window [boundary, boundary+10] winner
-        val winner = emotionAggregator.currentWinner()
-        if (!winner.isNullOrBlank()) {
-            // TODO: Replace with backend call; when URI is ready, supply to music manager
-            // For now we simulate no URI; MusicManager will continue default until available
-            // musicManager.setPendingGeneratedUri(generatedUri)
+    private fun completeDetectionWindow() {
+        if (!isDetectionWindowActive) return
+        isDetectionWindowActive = false
+
+        val summary = emotionAggregator.windowSummary()
+        val fallbackFromState = viewModel.state.lastResult.takeIf { supportedEmotionLabels.contains(it) }
+        val primaryCandidate = summary?.topLabel?.takeIf { supportedEmotionLabels.contains(it) }
+        val emotionToPlay = primaryCandidate
+            ?: fallbackFromState
+            ?: lastRecognizedEmotion?.takeIf { supportedEmotionLabels.contains(it) }
+
+        if (emotionToPlay.isNullOrBlank()) {
+            Log.d(TAG, "Detection window ended with no playable emotion; retrying detection")
+            startDetectionWindow()
+            return
+        }
+
+        val usePrimarySet = summary?.topShare?.let { it >= 0.5f } ?: false
+
+        cancelPendingDetectionStart()
+
+        val playbackStarted = musicManager.playPreGenerated(
+            emotionLabel = emotionToPlay,
+            usePrimarySet = usePrimarySet,
+            playbackDurationMs = playbackDurationMs
+        ) {
+            cadenceHandler.post {
+                cancelPendingDetectionStart()
+                if (!isDetectionWindowActive) {
+                    startDetectionWindow()
+                }
+            }
+        }
+
+        if (!playbackStarted) {
+            Log.w(TAG, "Failed to start playback for $emotionToPlay; restarting detection window")
+            cadenceHandler.post { startDetectionWindow() }
+            return
+        }
+
+        scheduleDetectionWindowDuringPlayback()
+    }
+
+    private fun scheduleDetectionWindowDuringPlayback() {
+        cancelPendingDetectionStart()
+        val delayBeforeNextWindow = playbackDurationMs - detectionWindowMs
+        if (delayBeforeNextWindow <= 0L) {
+            cadenceHandler.post { startDetectionWindow() }
+            return
+        }
+        val runnable = Runnable {
+            pendingDetectionStart = null
+            startDetectionWindow()
+        }
+        pendingDetectionStart = runnable
+        cadenceHandler.postDelayed(runnable, delayBeforeNextWindow)
+    }
+
+    private fun cancelPendingDetectionStart() {
+        pendingDetectionStart?.let {
+            cadenceHandler.removeCallbacks(it)
+            pendingDetectionStart = null
         }
     }
 

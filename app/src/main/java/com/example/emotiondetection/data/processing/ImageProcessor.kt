@@ -2,10 +2,10 @@ package com.example.emotiondetection.data.processing
 
 import android.graphics.Bitmap
 import android.util.Log
-import androidx.core.graphics.scale
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.exp
+import androidx.core.graphics.scale
 
 /**
  * Handles image preprocessing and conversion for ML model input
@@ -44,12 +44,12 @@ class ImageProcessor {
                 bitmap, xOffset, yOffset, minDimension, minDimension
             )
             // Scale to required size using high-quality filtering
-            val scaledBitmap = if (minDimension == INPUT_WIDTH && minDimension == INPUT_HEIGHT) {
+            val scaledBitmap = if (minDimension == INPUT_WIDTH) {
                 // Already correct size, just use the square bitmap
                 squareBitmap
             } else {
                 // Use createScaledBitmap with filter=true for better quality
-                Bitmap.createScaledBitmap(squareBitmap, INPUT_WIDTH, INPUT_HEIGHT, true)
+                squareBitmap.scale(INPUT_WIDTH, INPUT_HEIGHT)
             }
 
             // Convert to RGB format

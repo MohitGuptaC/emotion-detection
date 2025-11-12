@@ -6,9 +6,9 @@ package com.example.emotiondetection.audio
 class EmotionAggregator(
     private val windowMs: Long = 10_000L,
     private val minValidSamples: Int = 7,
-    private val confidenceThreshold: Float = 0.55f,
-    private val hysteresisMargin: Float = 0.12f // 12%
+    private val confidenceThreshold: Float = 0.55f
 ) {
+    data class WindowSummary(val topLabel: String, val topShare: Float, val totalSamples: Int)
     private data class Sample(val label: String, val confidence: Float, val timestampMs: Long)
     private val samples = ArrayDeque<Sample>()
     private var lastWinner: String? = null
@@ -25,31 +25,21 @@ class EmotionAggregator(
         }
     }
 
-    fun currentWinner(nowMs: Long = System.currentTimeMillis()): String? {
+    fun windowSummary(nowMs: Long = System.currentTimeMillis()): WindowSummary? {
         trim(nowMs)
-        if (samples.size < minValidSamples) return lastWinner
+        if (samples.size < minValidSamples) return null
 
-        val counts = mutableMapOf<String, Float>()
-        for (s in samples) {
-            counts[s.label] = (counts[s.label] ?: 0f) + s.confidence
+        val counts = mutableMapOf<String, Int>()
+        for (sample in samples) {
+            counts[sample.label] = (counts[sample.label] ?: 0) + 1
         }
-        if (counts.isEmpty()) return lastWinner
+        if (counts.isEmpty()) return null
 
         val sorted = counts.entries.sortedByDescending { it.value }
-        val top = sorted[0]
-        val second = if (sorted.size > 1) sorted[1] else null
-
-        // Hysteresis: winner must beat previous by margin OR be same as last winner
-        val winner = top.key
-        val prev = lastWinner
-        if (prev != null && prev != winner && second != null) {
-            val prevScore = counts[prev] ?: 0f
-            val marginOk = top.value >= prevScore * (1f + hysteresisMargin)
-            if (!marginOk) return prev
-        }
-
-        lastWinner = winner
-        return winner
+        val top = sorted.first()
+        val totalCount = counts.values.sum().takeIf { it > 0 } ?: return null
+        val topShare = (top.value.toFloat() / totalCount.toFloat()).coerceIn(0f, 1f)
+        return WindowSummary(top.key, topShare, samples.size)
     }
 
     fun reset() {

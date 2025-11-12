@@ -1,7 +1,5 @@
 package com.example.emotiondetection.ui
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +20,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -64,6 +59,7 @@ fun MainScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 // Live Camera Preview + Face Overlay (when available)
+                @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { context ->
                         val previewView = androidx.camera.view.PreviewView(context).apply {
@@ -94,7 +90,7 @@ fun MainScreen(
                         .weight(0.7f)
                         .padding(vertical = 8.dp)
                 )
-                
+
                 // Result Text
                 if (state.isLoading) {
                     Box(
@@ -190,43 +186,6 @@ fun MainScreen(
                 ResetButton(
                     enabled = (!state.isLoading && (state.isMonitoring || state.lastResult.isNotEmpty() || state.musicIsGenerated != null)),
                     onClick = { onEvent(MainScreenEvent.ResetDetection) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ImagePreview(
-    bitmap: Bitmap?,
-    modifier: Modifier = Modifier
-) {
-    // Use a consistent content scale
-    val imageContentScale = ContentScale.Fit
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        if (bitmap != null) {
-            // Display captured image with fixed content scale
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = stringResource(R.string.preview_of_the_captured_image),
-                contentScale = imageContentScale,
-                modifier = Modifier.fillMaxSize(0.95f) // Slightly smaller to avoid edge issues
-            )
-        } else {
-            // For empty state, use a fixed placeholder icon size
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.baseline_image_24),
-                    contentDescription = stringResource(R.string.preview_of_the_captured_image),
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize(0.5f) // Use fixed 50% size of the container
                 )
             }
         }

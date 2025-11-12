@@ -5,46 +5,134 @@ import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import kotlin.random.Random
 
 /**
- * Manages music playback for detected emotions.
- *
- * Behavior:
- * - When a new emotion is detected, starts playing its default track.
- * - Plays the default track for a fixed "default window" (e.g., 60 seconds).
- * - If emotions change during the window, the latest emotion is queued and will switch only
- *   at the next window boundary.
- * - After the default window ends, this class will call an optional callback to request
- *   a generated track for the current (or queued) emotion. If no generated track is provided,
- *   it continues with the default behavior (play default for the queued emotion).
- *
- * NOTE: Default tracks are expected under the app assets directory:
- * assets/default_music/{neutral|happiness|surprise|sadness|anger|disgust|fear|contempt}.wav
+ * Plays pre-generated tracks stored under assets/pre_generated_music.
  */
 class MusicManager(
     private val context: Context,
-    private val defaultWindowMs: Long = 60_000L,
-    private val onRequestGeneratedTrack: ((emotionLabel: String, respondWithUri: (android.net.Uri?) -> Unit) -> Unit)? = null,
-    private val onPlaybackStatusChanged: ((isGenerated: Boolean, emotionLabel: String) -> Unit)? = null
+    private val onPlaybackStatusChanged: ((Boolean?, String) -> Unit)? = null
 ) {
     private var mediaPlayer: MediaPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var playbackTimeout: Runnable? = null
+    private var playbackCompletionCallback: (() -> Unit)? = null
 
-    private var isInDefaultWindow: Boolean = false
-    private var currentEmotion: String? = null
-    private var queuedEmotion: String? = null
-    private var pendingGeneratedUri: android.net.Uri? = null
+    fun playPreGenerated(
+        emotionLabel: String,
+        usePrimarySet: Boolean,
+        playbackDurationMs: Long,
+        onPlaybackFinished: (() -> Unit)? = null
+    ): Boolean {
+        if (emotionLabel.isBlank()) return false
 
-    private val endOfDefaultWindowRunnable = Runnable {
-        handleEndOfDefaultWindow()
+        val baseName = mapEmotionToAssetBase(emotionLabel)
+        if (baseName == null) {
+            Log.w(TAG, "No asset mapping for emotion '$emotionLabel'")
+            return false
+        }
+
+        val targetFolder = buildFolderPath(baseName, usePrimarySet)
+        val tracks = loadTracks(targetFolder)
+
+        val tracksAvailable = tracks.isNotEmpty()
+
+        val assetPath = if (tracksAvailable) {
+            val chosenTrack = tracks.random(Random.Default)
+            "$targetFolder/$chosenTrack"
+        } else {
+            val fallback = fallbackAssetPath(baseName)
+            if (fallback == null) {
+                Log.w(TAG, "No tracks found in assets/$targetFolder and no fallback for $baseName")
+                return false
+            }
+            Log.w(TAG, "Falling back to $fallback for emotion '$emotionLabel'")
+            fallback
+        }
+
+        stopPlayback(triggerCallback = false)
+        playbackCompletionCallback = onPlaybackFinished
+
+        return try {
+            val afd = context.assets.openFd(assetPath)
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                prepare()
+                start()
+                setOnCompletionListener { completePlayback() }
+                setOnErrorListener { mp, what, extra ->
+                    Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra for $assetPath")
+                    mp.reset()
+                    completePlayback()
+                    true
+                }
+            }
+
+            onPlaybackStatusChanged?.invoke(tracksAvailable, emotionLabel)
+
+            val timeout = Runnable { completePlayback() }
+            playbackTimeout = timeout
+            handler.postDelayed(timeout, playbackDurationMs)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to play asset track '$assetPath'", e)
+            playbackCompletionCallback = null
+            false
+        }
     }
 
-    /**
-     * Supply a generated track URI to be used at the end of the current default window.
-     * If called multiple times within a window, the latest URI will be used.
-     */
-    fun setPendingGeneratedUri(uri: android.net.Uri?) {
-        pendingGeneratedUri = uri
+    fun stopPlayback(triggerCallback: Boolean = false) {
+        playbackTimeout?.let { handler.removeCallbacks(it) }
+        playbackTimeout = null
+        mediaPlayer?.release()
+        mediaPlayer = null
+        if (triggerCallback) {
+            notifyPlaybackFinished()
+        }
+    }
+
+    fun release() {
+        stopPlayback(triggerCallback = false)
+        playbackCompletionCallback = null
+    }
+
+    private fun completePlayback() {
+        stopPlayback(triggerCallback = false)
+        notifyPlaybackFinished()
+    }
+
+    private fun notifyPlaybackFinished() {
+        val callback = playbackCompletionCallback
+        playbackCompletionCallback = null
+        onPlaybackStatusChanged?.invoke(null, "")
+        callback?.invoke()
+    }
+
+    private fun loadTracks(folderPath: String): List<String> {
+        return try {
+            context.assets.list(folderPath)?.filter { asset ->
+                TRACK_EXTENSIONS.any { ext -> asset.endsWith(ext, ignoreCase = true) }
+            } ?: emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to list assets for $folderPath", e)
+            emptyList()
+        }
+    }
+
+    private fun fallbackAssetPath(baseName: String): String? {
+        return TRACK_EXTENSIONS.asSequence()
+            .map { ext -> "$FALLBACK_BASE/$baseName$ext" }
+            .firstOrNull { assetExists(it) }
+    }
+
+    private fun assetExists(assetPath: String): Boolean {
+        return try {
+            context.assets.openFd(assetPath).close()
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun mapEmotionToAssetBase(emotion: String): String? {
@@ -61,155 +149,18 @@ class MusicManager(
         }
     }
 
-    private fun openDefaultAssetFileDescriptor(baseName: String): android.content.res.AssetFileDescriptor? {
-        val candidates = listOf(
-            "default_music/$baseName.mp3",
-            "default_music/$baseName.wav"
-        )
-        for (path in candidates) {
-            try {
-                return context.assets.openFd(path)
-            } catch (_: Exception) {
-                // try next
-            }
-        }
-        return null
-    }
-
-    fun onEmotionDetected(emotionLabel: String) {
-        if (emotionLabel.isBlank()) return
-
-        if (!isInDefaultWindow || currentEmotion == null) {
-            startDefaultForEmotion(emotionLabel)
-        } else {
-            queuedEmotion = emotionLabel
-        }
-    }
-
-    private fun startDefaultForEmotion(emotionLabel: String) {
-        stopPlayback()
-        currentEmotion = emotionLabel
-        queuedEmotion = null
-        isInDefaultWindow = true
-        onPlaybackStatusChanged?.invoke(false, emotionLabel)
-
-        // Kick off generated track request at the START of the default window to allow ~1 minute for generation
-        onRequestGeneratedTrack?.invoke(emotionLabel) { uri ->
-            // Store for use at end of window
-            pendingGeneratedUri = uri
-        }
-
-        val baseName = mapEmotionToAssetBase(emotionLabel)
-        if (baseName == null) {
-            Log.w(TAG, "No default asset mapping for emotion: $emotionLabel")
-            return
-        }
-
-        try {
-            val afd = openDefaultAssetFileDescriptor(baseName)
-            if (afd == null) {
-                Log.w(TAG, "Default asset not found for emotion: $emotionLabel")
-                return
-            }
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                prepare()
-                start()
-                setOnCompletionListener {
-                    // If the file is shorter than the window, restart until window ends
-                    if (isInDefaultWindow) {
-                        it.seekTo(0)
-                        it.start()
-                    } else {
-                        it.release()
-                        mediaPlayer = null
-                    }
-                }
-                setOnErrorListener { mp, what, extra ->
-                    Log.e(TAG, "MediaPlayer error in default playback: what=$what, extra=$extra")
-                    mp.reset()
-                    true
-                }
-            }
-            handler.postDelayed(endOfDefaultWindowRunnable, defaultWindowMs)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start default track for '$emotionLabel': ${e.message}")
-        }
-    }
-
-    private fun handleEndOfDefaultWindow() {
-        isInDefaultWindow = false
-        val latestQueuedEmotion = queuedEmotion
-        val emotionAtBoundary = latestQueuedEmotion ?: currentEmotion
-
-        if (emotionAtBoundary == null) {
-            stopPlayback()
-            return
-        }
-
-        // If we have a pending generated track ready within this window, switch to it now.
-        val readyUri = pendingGeneratedUri
-        pendingGeneratedUri = null
-        if (readyUri != null) {
-            playGenerated(readyUri, emotionAtBoundary)
-            // After switching to generated, honor future emotion changes only at the next boundary.
-            currentEmotion = emotionAtBoundary
-            queuedEmotion = null
-        } else {
-            // Generated track not ready; switch to next emotion's default if queued, else continue same emotion.
-            if (latestQueuedEmotion != null && latestQueuedEmotion != currentEmotion) {
-                startDefaultForEmotion(latestQueuedEmotion)
-            } else {
-                startDefaultForEmotion(emotionAtBoundary)
-            }
-        }
-    }
-
-    private fun playGenerated(uri: android.net.Uri, emotionLabel: String) {
-        stopPlayback()
-        try {
-            onPlaybackStatusChanged?.invoke(true, emotionLabel)
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(context, uri)
-                prepare()
-                start()
-                setOnCompletionListener {
-                    // When generated ends, start a new default window to keep the loop running.
-                    it.release()
-                    mediaPlayer = null
-                    val nextEmotion = queuedEmotion ?: currentEmotion
-                    queuedEmotion = null
-                    if (!nextEmotion.isNullOrBlank()) {
-                        startDefaultForEmotion(nextEmotion!!)
-                    }
-                }
-                setOnErrorListener { mp, what, extra ->
-                    Log.e(TAG, "MediaPlayer error in generated playback: what=$what, extra=$extra")
-                    mp.reset()
-                    true
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start generated track: ${e.message}")
-        }
-    }
-
-    fun stopPlayback() {
-        handler.removeCallbacks(endOfDefaultWindowRunnable)
-        mediaPlayer?.release()
-        mediaPlayer = null
-        isInDefaultWindow = false
-    }
-
-    fun release() {
-        stopPlayback()
-        pendingGeneratedUri = null
-        currentEmotion = null
-        queuedEmotion = null
+    private fun buildFolderPath(baseName: String, primary: Boolean): String {
+        val bucket = if (primary) PRIMARY_FOLDER else SECONDARY_FOLDER
+        return "$BASE_PATH/$baseName/$bucket"
     }
 
     companion object {
         private const val TAG = "MusicManager"
+        private const val BASE_PATH = "pre_generated_music"
+        private const val PRIMARY_FOLDER = "set1"
+        private const val SECONDARY_FOLDER = "set2"
+        private const val FALLBACK_BASE = "default_music"
+        private val TRACK_EXTENSIONS = listOf(".mp3", ".wav", ".ogg")
     }
 }
 

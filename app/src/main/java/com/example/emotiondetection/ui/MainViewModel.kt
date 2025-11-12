@@ -129,7 +129,7 @@ class MainViewModel(
                         // Ignore loading in continuous path
                     }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Suppress exceptions in continuous path
             }
         }
@@ -140,8 +140,7 @@ class MainViewModel(
         updateStateWithLoading("Processing image...")
         
         viewModelScope.launch {
-            val result = emotionDetectionRepository.processImage(bitmap, context)
-              when (result) {
+            when (val result = emotionDetectionRepository.processImage(bitmap, context)) {
                 is EmotionDetectionResult.Success -> {
                     // Reset failure counter on success
                     consecutiveFailures = 0
