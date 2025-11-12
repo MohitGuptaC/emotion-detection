@@ -402,7 +402,7 @@ class MainActivity : ComponentActivity() {
         val yPixelStride = yPlane.pixelStride
         for (row in 0 until height) {
             var inputOffset = row * yRowStride
-            for (_ in 0 until width) {
+            for (col in 0 until width) {
                 nv21[outputPos++] = yBytes[inputOffset]
                 inputOffset += yPixelStride
             }
@@ -416,7 +416,7 @@ class MainActivity : ComponentActivity() {
         for (row in 0 until height / 2) {
             var uOffset = row * uRowStride
             var vOffset = row * vRowStride
-            for (_ in 0 until width / 2) {
+            for (col in 0 until width / 2) {
                 nv21[uvPos++] = vBytes[vOffset]
                 nv21[uvPos++] = uBytes[uOffset]
                 uOffset += uPixelStride
