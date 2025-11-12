@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.emotiondetection.R
 import com.example.emotiondetection.domain.model.EmotionDetectionResult
 import com.example.emotiondetection.domain.repository.EmotionDetectionRepository
 import kotlinx.coroutines.launch
@@ -21,10 +22,12 @@ class MainViewModel(
 
     // Track consecutive failures for recovery logic
     private var consecutiveFailures = 0
+    private var lastPositiveDetectionTimestamp = 0L
 
     companion object {
         private const val TAG = "MainViewModel"
         private const val MAX_CONSECUTIVE_FAILURES = 2
+        private const val NO_FACE_DEBOUNCE_MS = 1200L
     }
     
     /**
@@ -70,6 +73,7 @@ class MainViewModel(
             isLoading = false,
             detectedImage = detectedImage ?: state.detectedImage
         )
+        lastPositiveDetectionTimestamp = System.currentTimeMillis()
     }    
     
     private fun safeBitmapRecycle(bitmap: Bitmap?) {
@@ -101,6 +105,20 @@ class MainViewModel(
     fun updateMonitoring(isMonitoring: Boolean) {
         state = state.copy(isMonitoring = isMonitoring)
     }
+
+    fun handleNoFaceDetected(message: String) {
+        val shouldUpdate =
+            System.currentTimeMillis() - lastPositiveDetectionTimestamp >= NO_FACE_DEBOUNCE_MS ||
+                state.lastResult != message
+        if (shouldUpdate) {
+            state = state.copy(
+                lastResult = message,
+                lastConfidence = null,
+                isLoading = false
+            )
+            lastPositiveDetectionTimestamp = 0L
+        }
+    }
     
     /**
      * Continuous monitoring path: process a frame without showing loading states
@@ -118,9 +136,11 @@ class MainViewModel(
                             lastConfidence = result.confidence,
                             isLoading = false
                         )
+                        lastPositiveDetectionTimestamp = System.currentTimeMillis()
                     }
                     is EmotionDetectionResult.NoFacesDetected -> {
-                        // Suppress updating UI to avoid flicker; keep previous state
+                        val message = context.getString(R.string.no_face_detected)
+                        handleNoFaceDetected(message)
                     }
                     is EmotionDetectionResult.Error -> {
                         // Suppress frequent error messages during live monitoring
@@ -180,9 +200,15 @@ class MainViewModel(
                 is EmotionDetectionResult.NoFacesDetected -> {
                     // Reset failure counter on successful processing (even if no faces)
                     consecutiveFailures = 0
+                    lastPositiveDetectionTimestamp = 0L
                     // Only recycle old bitmap after successful processing
                     val oldBitmap = state.detectedImage
-                    updateStateWithSuccess("No faces detected", detectedImage = result.originalBitmap)
+                    state = state.copy(
+                        lastResult = context.getString(R.string.no_face_detected),
+                        lastConfidence = null,
+                        isLoading = false,
+                        detectedImage = result.originalBitmap
+                    )
                     // Safe to recycle old bitmap now
                     safeBitmapRecycle(oldBitmap)
                 }

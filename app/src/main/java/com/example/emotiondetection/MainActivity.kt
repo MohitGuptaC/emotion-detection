@@ -8,6 +8,7 @@ import android.graphics.ImageDecoder
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
@@ -21,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -82,6 +84,7 @@ class MainActivity : ComponentActivity() {
     private var previewView: PreviewView? = null
     private var faceOverlayView: FaceOverlayView? = null
     private val mainHandler by lazy { android.os.Handler(mainLooper) }
+    private var lastAnalyzerFrameTimestamp = 0L
     private val faceDetector by lazy {
         com.google.mlkit.vision.face.FaceDetection.getClient(
             com.google.mlkit.vision.face.FaceDetectorOptions.Builder()
@@ -144,6 +147,7 @@ class MainActivity : ComponentActivity() {
     private fun MainScreenContent() {
         val state = viewModel.state
         var checkCameraPermissionOnStart by remember { mutableStateOf(true) }
+        val noFaceMessage = stringResource(R.string.no_face_detected)
         
         // Check camera permission on first composition without launching camera
         LaunchedEffect(checkCameraPermissionOnStart) {
@@ -174,12 +178,21 @@ class MainActivity : ComponentActivity() {
         // Aggregate detections continuously; cadence scheduler decides when to act
         LaunchedEffect(state.lastResult, state.lastConfidence, state.isLoading) {
             if (!state.isLoading && state.lastResult.isNotBlank()) {
-                val conf = state.lastConfidence ?: 0f
-                if (supportedEmotionLabels.contains(state.lastResult) && conf >= aggregatorConfidenceThreshold) {
-                    lastRecognizedEmotion = state.lastResult
+                val label = state.lastResult
+                val conf = state.lastConfidence
+
+                if (label.equals(noFaceMessage, ignoreCase = true)) {
+                    lastRecognizedEmotion = null
+                    return@LaunchedEffect
                 }
-                if (isDetectionWindowActive) {
-                    emotionAggregator.add(state.lastResult, conf)
+
+                if (conf != null && supportedEmotionLabels.contains(label)) {
+                    if (conf >= aggregatorConfidenceThreshold) {
+                        lastRecognizedEmotion = label
+                        if (isDetectionWindowActive) {
+                            emotionAggregator.add(label, conf)
+                        }
+                    }
                 }
             }
         }
@@ -250,53 +263,56 @@ class MainActivity : ComponentActivity() {
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also { analysis ->
-                        // Properly mutable throttle timestamp so we actually update it when a frame is processed
-                        var lastProcessed = 0L
                         analysis.setAnalyzer(cameraExecutor!!) { imageProxy ->
                             try {
                                 // Throttle processing (process at most once per second)
-                                val now = System.currentTimeMillis()
-                                if (now - lastProcessed >= 1000) {
-                                    // Create a corrected bitmap for downstream usage
-                                    val bitmap = imageProxy.toBitmapCorrected()
+                                val now = SystemClock.elapsedRealtime()
+                                if (now - lastAnalyzerFrameTimestamp < 1000) {
+                                    try {
+                                        imageProxy.close()
+                                    } catch (_: Exception) { }
+                                    return@setAnalyzer
+                                }
+                                lastAnalyzerFrameTimestamp = now
 
-                                    // Prefer running a fast face detector first; only when faces are present
-                                    // do we forward the frame to the heavier emotion model. This prevents
-                                    // spurious emotion detections when no face is visible.
-                                    val mediaImage = imageProxy.image
-                                    if (bitmap != null && mediaImage != null) {
-                                        val rotation = imageProxy.imageInfo.rotationDegrees
-                                        val inputImage = com.google.mlkit.vision.common.InputImage.fromMediaImage(mediaImage, rotation)
-                                        faceDetector.process(inputImage)
-                                            .addOnSuccessListener { faces ->
-                                                if (faces.isNotEmpty()) {
-                                                    // Only run the emotion pipeline when we actually have a face
-                                                    viewModel.handleContinuousFrame(bitmap, this@MainActivity)
-                                                    updateOverlayBoxes(faces, imageProxy)
-                                                } else {
-                                                    // No faces: clear overlay and skip model inference
-                                                    clearOverlay()
-                                                }
-                                            }
-                                            .addOnFailureListener {
+                                // Create a corrected bitmap for downstream usage
+                                val bitmap = imageProxy.toBitmapCorrected()
+
+                                // Prefer running a fast face detector first; only when faces are present
+                                // do we forward the frame to the heavier emotion model. This prevents
+                                // spurious emotion detections when no face is visible.
+                                val mediaImage = imageProxy.image
+                                if (bitmap != null && mediaImage != null) {
+                                    val rotation = imageProxy.imageInfo.rotationDegrees
+                                    val inputImage = com.google.mlkit.vision.common.InputImage.fromMediaImage(mediaImage, rotation)
+                                    faceDetector.process(inputImage)
+                                        .addOnSuccessListener { faces ->
+                                            if (faces.isNotEmpty()) {
+                                                // Only run the emotion pipeline when we actually have a face
+                                                viewModel.handleContinuousFrame(bitmap, this@MainActivity)
+                                                updateOverlayBoxes(faces, imageProxy)
+                                            } else {
+                                                // No faces: clear overlay and skip model inference
+                                                viewModel.handleNoFaceDetected(getString(R.string.no_face_detected))
                                                 clearOverlay()
                                             }
-                                            .addOnCompleteListener {
-                                                // Close the imageProxy after ML Kit finished with the frame
-                                                try {
-                                                    imageProxy.close()
-                                                } catch (_: Exception) { }
-                                            }
-                                        // We returned early from finally-close path by closing in completion listener
-                                        // Update throttle timestamp after scheduling work
-                                        lastProcessed = now
-                                        return@setAnalyzer
-                                    } else {
-                                        // No usable media image or bitmap: close immediately
-                                        try {
-                                            imageProxy.close()
-                                        } catch (_: Exception) { }
-                                    }
+                                        }
+                                        .addOnFailureListener {
+                                            clearOverlay()
+                                        }
+                                        .addOnCompleteListener {
+                                            // Close the imageProxy after ML Kit finished with the frame
+                                            try {
+                                                imageProxy.close()
+                                            } catch (_: Exception) { }
+                                        }
+                                    // End early after ML Kit schedules work and handles closing
+                                    return@setAnalyzer
+                                } else {
+                                    // No usable media image or bitmap: close immediately
+                                    try {
+                                        imageProxy.close()
+                                    } catch (_: Exception) { }
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Analyzer error: ${e.message}")
