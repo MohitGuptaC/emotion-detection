@@ -250,33 +250,59 @@ class MainActivity : ComponentActivity() {
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also { analysis ->
-                        val lastProcessed = 0L
+                        // Properly mutable throttle timestamp so we actually update it when a frame is processed
+                        var lastProcessed = 0L
                         analysis.setAnalyzer(cameraExecutor!!) { imageProxy ->
                             try {
-                                // Throttle processing (e.g., every 750ms)
+                                // Throttle processing (process at most once per second)
                                 val now = System.currentTimeMillis()
                                 if (now - lastProcessed >= 1000) {
+                                    // Create a corrected bitmap for downstream usage
                                     val bitmap = imageProxy.toBitmapCorrected()
-                                    // Use lightweight continuous path so UI doesn’t flicker while still sharing the
-                                    // same ML pipeline output semantics as gallery capture.
-                                    viewModel.handleContinuousFrame(bitmap, this@MainActivity)
+
+                                    // Prefer running a fast face detector first; only when faces are present
+                                    // do we forward the frame to the heavier emotion model. This prevents
+                                    // spurious emotion detections when no face is visible.
                                     val mediaImage = imageProxy.image
-                                    if (mediaImage != null) {
+                                    if (bitmap != null && mediaImage != null) {
                                         val rotation = imageProxy.imageInfo.rotationDegrees
                                         val inputImage = com.google.mlkit.vision.common.InputImage.fromMediaImage(mediaImage, rotation)
                                         faceDetector.process(inputImage)
                                             .addOnSuccessListener { faces ->
-                                                updateOverlayBoxes(faces, imageProxy)
+                                                if (faces.isNotEmpty()) {
+                                                    // Only run the emotion pipeline when we actually have a face
+                                                    viewModel.handleContinuousFrame(bitmap, this@MainActivity)
+                                                    updateOverlayBoxes(faces, imageProxy)
+                                                } else {
+                                                    // No faces: clear overlay and skip model inference
+                                                    clearOverlay()
+                                                }
                                             }
                                             .addOnFailureListener {
                                                 clearOverlay()
                                             }
+                                            .addOnCompleteListener {
+                                                // Close the imageProxy after ML Kit finished with the frame
+                                                try {
+                                                    imageProxy.close()
+                                                } catch (_: Exception) { }
+                                            }
+                                        // We returned early from finally-close path by closing in completion listener
+                                        // Update throttle timestamp after scheduling work
+                                        lastProcessed = now
+                                        return@setAnalyzer
+                                    } else {
+                                        // No usable media image or bitmap: close immediately
+                                        try {
+                                            imageProxy.close()
+                                        } catch (_: Exception) { }
                                     }
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Analyzer error: ${e.message}")
-                            } finally {
-                                imageProxy.close()
+                                try {
+                                    imageProxy.close()
+                                } catch (_: Exception) { }
                             }
                         }
                     }
